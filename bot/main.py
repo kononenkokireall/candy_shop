@@ -2,42 +2,49 @@
 import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
-# from aiogram.types import DefaultBotProperties
+from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 from aiogram import Router
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
 
-# Считывание файла токена
-# with open('TOKEN_FILE.txt', 'r', encoding='UTF-8') as token:
-#     TOKEN = token.read()
-# # Токен бота
-# API_TOKEN = TOKEN
+from .states import OrderProcess
 
-# Инициация бота и диспетчера
-# bot = Bot(token=API_TOKEN)
+
+# Инициация маршрутизатора и хранилища состояний
+
 router = Router()
-# dp = Dispatcher()
-# router.include_router(router)
+storege = MemoryStorage()  # Хранилище состояний памяти
 
 # Обрабочик команды /Start
 
 
 @router.message(Command('start'))
-async def cmd_start(message: Message):
+# Декоратор @router.message() для обработки сообщений с командой start.
+async def cmd_start(message: Message, state: FSMContext):
     """
-    Это обработчик команды /start.
-    Использует декоратор @router.message() для обработки сообщений с 
-    командой start.
+    Обработчик команды /start.
     Функция:
     Принимает объект сообщения message.
     Отправляет ответное сообщение "Привет! Я твой бот. Чем могу помочь?" 
     пользователю, вызвавшему команду.
     Применение:
-    Приветствие пользователя при первом запуске бота.
-    Может быть дополнена логикой для предоставления инструкций или начальной 
-    информации.
+    Начинает процесс регистрации, устанавливая начальное состояние.
     """
-    await message.answer("Инфо про магазин")
+    await state.set_state(OrderProcess.Registration)
+    await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?")
 
+
+@router.message(OrderProcess.Registration)
+async def handle_registration(message: Message, state: FSMContext):
+    """
+    Обрабатывает ввод даных пользователя при резистрации
+    """
+    user_name = message.text
+    # Сохраняем имя в контексте состояния
+    await state.update_data(name=user_name)
+    await state.set_state(OrderProcess.Greeting)
+    await message.answer(f"Рад с Вами познакомится {user_name} ! Чем могу помочь?")
 # Обработчик команды /Help
 
 
@@ -45,34 +52,66 @@ async def cmd_start(message: Message):
 async def cmd_help(message: Message):
     """
     Описание:
-    Обрабатывает команду /help.
     Отправляет пользователю список доступных команд и их краткое описание.
-    Принимает объект сообщения message.
     Применение:
     Показывает справку пользователю, чтобы он мог разобраться, какие 
     команды доступны в боте.
     """
-    await message.answer('Инфо про помощь')
+    await message.answer('''Инфо.помощь. Доступные Команды:
+                            /Start - Начать работу с ботом
+                            /Help  - Получить инфо. о функиях бота''')
 
+
+@router.message(OrderProcess.Greeting)
+async def handle_greeting(message: Message, state: FSMContext):
+    """
+    Обрабатывает действия после приветствия
+    """
+    await state.set_state(OrderProcess.SelectItem)
+    await message.answer("""Пожайлуста сделайте выбор товара. Напишите номер 
+                            товара(Пример: 4231)
+                        """)
+
+
+@router.message(OrderProcess.SelectItem)
+async def handle_select_item(message: Message, state: FSMContext):
+    """
+    Обрабатывает выбор товара
+    """
+    selected_item = message.text
+    await state.update_data(item=selected_item)
+    await state.set_state(OrderProcess.Payment)
+    await message.answer(f"Вы выбрали товар {selected_item}. Выберите способ оплаты: ")
 # Обработчик текста
 
 
-@router.message(lambda message: message.text)
-async def echo_handler(message: Message):
+@router.message(OrderProcess.Payment)
+async def handle_payment(message: Message, state: FSMContext):
     """
-    Описание:
-    Это базовый обработчик всех текстовых сообщений, которые не соответствуют
-    другим командам.
-    Берет текст из сообщения пользователя и отправляет его обратно с пометкой:
-    "Вы написали: ...".
-    Применение:
-    Используется для тестирования или обработки непредвиденных сообщений.
-    Может быть улучшен для обработки сложных пользовательских запросов.
+    Обрабатывает способ оплаты пользывателя
     """
-    await message.answer(f'Вы написали {message.text}')
+    payment_method = message.text
+    user_data = await state.get_data()  # Получение сохраненых данных
+    item = user_data.get('item')
+    await state.set_state(OrderProcess.Confirmation)
+    await message.answer(f"""Вы выбрали метод оплаты: {payment_method}.
+                         Подтвердите заказ на {item} да/нет """)
+
+
+@router.message(OrderProcess.Confirmation)
+async def handle_confirmation(message: Message, state: FSMContext):
+    """
+    Обрабатывает подтверждение заказа
+    """
+    if message.text.lower() in ['да', 'нет']:
+        await message.answer("Ваш заказ принят! Спасибо за покупку.")
+        await state.clear()  # Сбрасиваем состояние
+    else:
+        await message.answer("""Заказ отменен. 
+                             Нажмите /start что бы занова начать роботу с ботом""")
+        await state.clear()
 
 # Основная функция для запуска бота
-
 
 async def main():
     """
@@ -91,12 +130,13 @@ async def main():
     Это точка входа для запуска бота.
     Все настройки и запуск логики бота происходят в этой функции.
     """
+    # Считывание файла токена
     with open("TOKEN_FILE.txt", 'r', encoding="UTF-8") as file_token:
         api_token = file_token.read().strip()
-    # await dp.start_polling(bot)
+    # Инициация бота и диспетчера
     local_bot = Bot(
         token=api_token,
-        # default=DefaultBotProperties(parse_mode="HTML") # TODO
+        default=DefaultBotProperties(parse_mode="HTML")
     )
     local_dp = Dispatcher()
     local_dp.include_router(router)
