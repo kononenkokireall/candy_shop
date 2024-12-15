@@ -1,1 +1,2 @@
-# Клавиатуры (ReplyKeyboard, InlineKeyboard)
+# Клавиатуры ReplyKeyboardMarkup для основных действий и InlineKeyboardMarkup
+# для уточняющих шагов.

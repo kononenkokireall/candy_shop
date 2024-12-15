@@ -7,9 +7,7 @@ from aiogram.filters import Command
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
-
-from .states import OrderProcess
-
+from states import OrderProcess
 
 # Инициация маршрутизатора и хранилища состояний
 
