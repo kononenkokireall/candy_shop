@@ -1,0 +1,64 @@
+# Python
+*.pyc
+*.pyo
+__pycache__/
+*.pyd
+*.pdb
+*.so
+
+# Virtual Environment
+env/
+venv/
+ENV/
+venv.bak/
+.Python
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*.iml
+
+# Heroku и локальные конфигурации
+*.env
+.env.*
+instance/
+config.py
+TOKEN_FILE.txt
+
+# Логи и отладочные файлы
+*.log
+*.sqlite3
+debug.log
+
+# Пакеты и зависимости
+pip-log.txt
+pip-delete-this-directory.txt
+__pycache__/
+
+# Базы данных
+*.db
+*.sqlite
+
+# Docker (если используете)
+Dockerfile
+docker-compose.yml
+*.dockerignore
+
+# Pytest
+.pytest_cache/
+.cache/
+
+# Jupyter Notebook (если используете)
+.ipynb_checkpoints/
+
+# Heroku Node.js buildpacks (если используете)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
