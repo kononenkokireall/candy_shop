@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
+from keyboards import main_menu_keyboard, catalog_keyboard, payment_methods_keyboard, confirmation_keyboard, help_keyboard
 from states import OrderProcess
 
 # Инициация маршрутизатора и хранилища состояний
@@ -30,8 +31,8 @@ async def cmd_start(message: Message, state: FSMContext):
     Начинает процесс регистрации, устанавливая начальное состояние.
     """
     await state.set_state(OrderProcess.Registration)
-    await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?")
-
+    await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?", reply_markup=catalog_keyboard())
+#TODO
 
 @router.message(OrderProcess.Registration)
 async def handle_registration(message: Message, state: FSMContext):
@@ -110,6 +111,7 @@ async def handle_confirmation(message: Message, state: FSMContext):
         await state.clear()
 
 # Основная функция для запуска бота
+
 
 async def main():
     """
