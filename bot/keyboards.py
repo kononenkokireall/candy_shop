@@ -5,7 +5,7 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup
-)
+    )
 
 # --- Основное меню (ReplyKeyboardMarkup) ---
 

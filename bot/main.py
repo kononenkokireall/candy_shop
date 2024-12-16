@@ -1,5 +1,6 @@
 # Точка входа в приложение
 import asyncio
+from keyboards import main_menu_keyboard, catalog_keyboard, payment_methods_keyboard, confirmation_keyboard, help_keyboard
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.client.default import DefaultBotProperties
@@ -7,7 +8,6 @@ from aiogram.filters import Command
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
-from keyboards import main_menu_keyboard, catalog_keyboard, payment_methods_keyboard, confirmation_keyboard, help_keyboard
 from states import OrderProcess
 
 # Инициация маршрутизатора и хранилища состояний
@@ -31,8 +31,8 @@ async def cmd_start(message: Message, state: FSMContext):
     Начинает процесс регистрации, устанавливая начальное состояние.
     """
     await state.set_state(OrderProcess.Registration)
-    await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?", reply_markup=catalog_keyboard())
-#TODO
+    await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?", reply_markup=main_menu_keyboard())
+
 
 @router.message(OrderProcess.Registration)
 async def handle_registration(message: Message, state: FSMContext):
@@ -43,7 +43,7 @@ async def handle_registration(message: Message, state: FSMContext):
     # Сохраняем имя в контексте состояния
     await state.update_data(name=user_name)
     await state.set_state(OrderProcess.Greeting)
-    await message.answer(f"Рад с Вами познакомится {user_name} ! Чем могу помочь?")
+    await message.answer(f"Рад с Вами познакомится {user_name} ! Чем могу помочь?", reply_markup=catalog_keyboard())
 # Обработчик команды /Help
 
 
@@ -56,9 +56,9 @@ async def cmd_help(message: Message):
     Показывает справку пользователю, чтобы он мог разобраться, какие 
     команды доступны в боте.
     """
-    await message.answer('''Инфо.помощь. Доступные Команды:
+    await message.answer("""Инфо.помощь. Доступные Команды:
                             /Start - Начать работу с ботом
-                            /Help  - Получить инфо. о функиях бота''')
+                            /Help  - Получить инфо. о функиях бота""", reply_markup=help_keyboard)
 
 
 @router.message(OrderProcess.Greeting)
@@ -80,7 +80,7 @@ async def handle_select_item(message: Message, state: FSMContext):
     selected_item = message.text
     await state.update_data(item=selected_item)
     await state.set_state(OrderProcess.Payment)
-    await message.answer(f"Вы выбрали товар {selected_item}. Выберите способ оплаты: ")
+    await message.answer(f"Вы выбрали товар {selected_item}. Выберите способ оплаты: ", reply_markup=payment_methods_keyboard())
 # Обработчик текста
 
 
@@ -94,7 +94,7 @@ async def handle_payment(message: Message, state: FSMContext):
     item = user_data.get('item')
     await state.set_state(OrderProcess.Confirmation)
     await message.answer(f"""Вы выбрали метод оплаты: {payment_method}.
-                         Подтвердите заказ на {item} да/нет """)
+                         Подтвердите заказ на {item} да/нет """, reply_markup=confirmation_keyboard)
 
 
 @router.message(OrderProcess.Confirmation)
@@ -106,7 +106,7 @@ async def handle_confirmation(message: Message, state: FSMContext):
         await message.answer("Ваш заказ принят! Спасибо за покупку.")
         await state.clear()  # Сбрасиваем состояние
     else:
-        await message.answer("""Заказ отменен. 
+        await message.answer("""Заказ отменен.
                              Нажмите /start что бы занова начать роботу с ботом""")
         await state.clear()
 
