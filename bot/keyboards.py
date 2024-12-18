@@ -5,7 +5,7 @@ from aiogram.types import (
     KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup
-    )
+)
 
 # --- Основное меню (ReplyKeyboardMarkup) ---
 
@@ -23,6 +23,28 @@ def main_menu_keyboard():
         ],
         resize_keyboard=True
     )
+
+# --- Клавиатура для взаимодействия с товаром ---
+
+
+def item_detali_keyboard(category_key: str):
+    """
+    Создает инлайн-клавиатуру для взаимодействия с товаром
+    Параметры:
+    - category_key - ключ категории товара
+    Return:
+    - InlineKeyboardMarkup с кнопками для добавления товара в корзину и 
+    возврата в каталог.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Добавить в корзину",
+                                  callback_data=f"add_to_cart_{category_key}")],
+            [InlineKeyboardButton(text="Вернутся в каталог",
+                                  callback_data="catalog_return")]
+        ]
+    )
+
 # --- Католог товаров (InlineKeyboardMarkup) ---
 
 
@@ -33,11 +55,9 @@ def catalog_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(
-                text="Шоколад", callback_data="catalog_chocolate")],
+                text="Canabis Lollipops", callback_data="catalog_lollypops")],
             [InlineKeyboardButton(
-                text="Леденцы", callback_data="catalog_candies")],
-            [InlineKeyboardButton(
-                text="Карамель", callback_data="catalog_caramel")],
+                text="Акссесуары", callback_data="catalog_accessories")],
         ]
     )
 # --- Клавиатура для выбора способа оплаты (InlineKeyboardMarkup) ---
