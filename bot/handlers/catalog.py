@@ -73,7 +73,7 @@ PRODUCT_CATALOG = {
     },
     "accessories": {
         "name": "thimbles",
-        "item": [
+        "items": [
             {
                 "id": "201",
                 "name": "orange_thimbles",

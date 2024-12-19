@@ -24,7 +24,7 @@ def main_menu_keyboard():
         resize_keyboard=True
     )
 
-# --- Клавиатура для взаимодействия с товаром ---
+# --- Клавиатура для взаимодействия с товаром и управления корзиной ---
 
 
 def item_detali_keyboard(category_key: str):
@@ -41,7 +41,11 @@ def item_detali_keyboard(category_key: str):
             [InlineKeyboardButton(text="Добавить в корзину",
                                   callback_data=f"add_to_cart_{category_key}")],
             [InlineKeyboardButton(text="Вернутся в каталог",
-                                  callback_data="catalog_return")]
+                                  callback_data="catalog_return")],
+            [InlineKeyboardButton(text="Очистить корзину",
+                                  callback_data="cart_clear")],
+            [InlineKeyboardButton(text="Оформить заказ",
+                                  callback_data="cart_checkout")],
         ]
     )
 
