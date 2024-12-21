@@ -2,7 +2,7 @@
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from keyboards import item_detali_keyboard
+from keyboards import item_detail_kb
 
 router = Router()
 
@@ -25,7 +25,7 @@ def get_user_cart(user_id):
 @router.message()
 async def add_to_cart(message: Message, state: FSMContext):
     """
-    Добавляет ковар в корзину если пользаватель указал ID товара
+    Добавляет товар в корзину если пользаватель указал ID товара
     """
     user_id = message.from_user.id
     user_data = await state.get_data()
@@ -42,7 +42,7 @@ async def add_to_cart(message: Message, state: FSMContext):
                 user_cart.append(item)
                 await message.answer(
                     f"Товар \"{item['name']}\" добавлен в корзину.",
-                    reply_markup=item_detali_keyboard(),
+                    reply_markup=item_detail_kb(),
                 )
                 return
 
@@ -64,10 +64,11 @@ async def view_cart(message: Message):
     else:
         cart_items = "\n\n".join(
             [f"""Название: {item["name"]}\nЦена {
-                item['price']} Zl""" for item in user_cart]
+                item['price']} PLN""" for item in user_cart]
         )
         total_price = sum(item["price"] for item in user_cart)
-        await message.answer(f"""Ваши товары: \n\n{cart_items}\n\nСумма к оплате: {total_price} Zl""", reply_markup=item_detali_keyboard(),)
+        await message.answer(f"""Ваши товары: \n\n{cart_items}\n\nСумма к оплате: {total_price} PLN""", reply_markup=item_detail_kb(user_cart[0].get("category", ""))
+                             )
 
 # --- Очистка корзины ---
 
@@ -99,5 +100,5 @@ async def checkout_cart(callback_query: CallbackQuery):
         total_price = sum(item["price"] for item in user_cart)
         CART_STORAGE[user_id] = []  # Очищение корзины после оформления
         await callback_query.message.edit_text(
-            f"Спасибо за заказ!) Сумма к оплате: {total_price} Zl."
+            f"Спасибо за заказ!) Сумма к оплате: {total_price} PLN."
         )

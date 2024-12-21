@@ -5,8 +5,8 @@ from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from data import PRODUCT_CATALOG
-from keyboards import catalog_keyboard, payment_methods_keyboard, item_detali_keyboard
 from states import OrderProcess
+from keyboards import catalog_kb, pay_methods_kb, item_detail_kb
 
 router = Router()
 
@@ -24,7 +24,7 @@ async def user_catalog(callback: CallbackQuery):
         await callback.message.edit_text(
             f"""<b>{item['name']}<b>\n\n{
                 item['description']}<b>\nPrice{item['price']}""",
-            reply_markup=item_detali_keyboard(category_key)
+            reply_markup=item_detail_kb(category_key)
         )
     else:
         await callback.message.answer("Извините, выбранная категория временно отсутствует.")
@@ -73,7 +73,7 @@ async def handle_add_to_cart(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(
             f"""Товар {
                 item['name']}, добавлен в корзину.\n Желаете продолжить покупки?""",
-            reply_markup=catalog_keyboard()
+            reply_markup=catalog_kb()
         )
     else:
         await callback.message.answer("Ошибка добавления товара в корзину.")
@@ -106,5 +106,5 @@ async def user_choose_payment(callback: CallbackQuery, state: FSMContext):
     """
     await state.set_state(OrderProcess.Payment)
     await callback.message.edit_text(
-        "Выберите способ оплаты: ", reply_markup=payment_methods_keyboard
+        "Выберите способ оплаты: ", reply_markup=pay_methods_kb()
     )

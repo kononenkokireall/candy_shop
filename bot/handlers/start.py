@@ -3,7 +3,7 @@ from aiogram.types import Message
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from keyboards import main_menu_keyboard, catalog_keyboard, city_selection_keyboard
+from keyboards import main_menu_kb, catalog_kb, city_select_kb
 from states import OrderProcess
 
 # Создаем маршрутезатор
@@ -24,13 +24,13 @@ async def cmd_start(message: Message, state: FSMContext):
         await message.answer(
             f"""С возвращением, {user_name} из города {
                 user_city}! Чем могу помочь?""",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu_kb()
         )
     else:
         # Устанавливаем состояние регистрации
         await state.set_state(OrderProcess.Registration)
         await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?",
-                             reply_markup=main_menu_keyboard())
+                             reply_markup=main_menu_kb())
 
 
 @router.message(OrderProcess.Registration)
@@ -50,7 +50,7 @@ async def user_registration(message: Message, state: FSMContext):
     # Переводим пользователя на следующий шаг: выбор города
     await state.set_state(OrderProcess.SelectCity)
     await message.answer(
-        "Спасибо! Теперь выберете город, в котором вы находитесь:", reply_markup=city_selection_keyboard()
+        "Спасибо! Теперь выберете город, в котором вы находитесь:", reply_markup=city_select_kb()
     )
 
 
@@ -75,7 +75,7 @@ async def user_select_city(message: Message, state: FSMContext):
     user_data = await state.get_data()
     user_name = user_data["name"]
     await message.answer(
-        f"Рад с Вами познакомиться, {user_name} из {user_city}! Чем могу помочь?", reply_markup=catalog_keyboard()
+        f"Рад с Вами познакомиться, {user_name} из {user_city}! Чем могу помочь?", reply_markup=catalog_kb()
     )
 
 
@@ -87,4 +87,4 @@ async def cmd_change_city(message: Message, state: FSMContext):
     """
     await state.set_state(OrderProcess.SelectCity)
     await message.answer("""Вы хотите изменить город. 
-                         Пожайлуста, Выберете город, в котором вы находитесь:""", reply_markup=city_selection_keyboard())
+                         Пожайлуста, Выберете город, в котором вы находитесь:""", reply_markup=city_select_kb())

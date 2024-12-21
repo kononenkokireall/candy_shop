@@ -10,7 +10,7 @@ from aiogram.types import (
 # --- Основное меню (ReplyKeyboardMarkup) ---
 
 
-def main_menu_keyboard():
+def main_menu_kb():
     """
     Клавиатура основного меню для приветствия пользователю и выбора 
     основного действия.
@@ -27,7 +27,7 @@ def main_menu_keyboard():
 # --- Клавиатура для выбора города ---
 
 
-def city_selection_keyboard():
+def city_select_kb():
     """
     Клавиатура для выбора города
     """
@@ -43,7 +43,7 @@ def city_selection_keyboard():
 # --- Клавиатура для взаимодействия с товаром и управления корзиной ---
 
 
-def item_detail_keyboard(category_key: str):
+def item_detail_kb(category_key: str):
     """
     Создает инлайн-клавиатуру для взаимодействия с товаром
     Параметры:
@@ -68,7 +68,7 @@ def item_detail_keyboard(category_key: str):
 # --- Католог товаров (InlineKeyboardMarkup) ---
 
 
-def catalog_keyboard(categories: list):
+def catalog_kb(categories: list):
     """
     Динамическая Инлайн-клавиатура для выбора категории товаров.
     Параметры:
@@ -84,7 +84,7 @@ def catalog_keyboard(categories: list):
 # --- Клавиатура для выбора способа оплаты (InlineKeyboardMarkup) ---
 
 
-def payment_methods_keyboard():
+def pay_methods_kb():
     """
     Инлайн-клавиатура для способа оплаты
     """
@@ -98,7 +98,7 @@ def payment_methods_keyboard():
 # --- Подтверждение Заказа(ReplyKeyboardMarkup) ---
 
 
-def confirmation_keyboard():
+def confi_kb():
     """
     Клавиатура для подтверждения оплаты
     """
@@ -113,7 +113,7 @@ def confirmation_keyboard():
 # --- Клавиатура с ссылкой на поддержку (InlineKeyboardMarkup) ---
 
 
-def help_keyboard():
+def help_kb():
     """
     Инлайн-клавиатура для отображения ссылки на поддержку.
     """
