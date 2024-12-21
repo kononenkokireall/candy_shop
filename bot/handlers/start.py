@@ -16,10 +16,18 @@ async def cmd_start(message: Message, state: FSMContext):
     Обработчик команды /start.
     Приветствует пользователя и запускает процесс регистрации.
     """
+    # Проверяем, зарегистрирован ли пользователь
+    user_data = await state.get_data()
+    if "name" in user_data:
+        user_name = user_data["name"]
+        await message.answer(
+            f"С возвращением, {user_name}! Чем могу помочь?",
+            reply_markup=main_menu_keyboard()
+        )
     # Устанавливаем состояние регистрации
     await state.set_state(OrderProcess.Registration)
     await message.answer("Привет! Пожалуйста, зарегистрируйтесь. Как вас зовут?",
-                         reply_markup=main_menu_keyboard)
+                         reply_markup=main_menu_keyboard())
 
 
 @router.message(OrderProcess.Registration)
@@ -29,8 +37,9 @@ async def user_registration(message: Message, state: FSMContext):
     Сохраняет имя в состоянии и переводит пользователя на следующий шаг.
     """
     user_name = message.text.strip()
-    if len(user_name) < 2:
-        await message.answer("Имя слишком короткое. Пожалуйста, введите корректное имя.")
+    if len(user_name) < 2 or not user_name.isalpha():
+        await message.answer("""Имя слишком короткое или содержит 
+                             недопустимые символы Пожалуйста, введите корректное имя.""")
         return
     # Сохраняем данные(Имя) пользователя в состоянии
     await state.update_data(name=user_name)
@@ -38,4 +47,4 @@ async def user_registration(message: Message, state: FSMContext):
     # Переводим пользователя на следующий шаг
     await state.set_state(OrderProcess.Greeting)
     await message.answer(f"Рад с вами познакомиться, {user_name}! Чем могу помочь?",
-                         reply_markup=catalog_keyboard)
+                         reply_markup=catalog_keyboard())
