@@ -1,6 +1,6 @@
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InputMediaPhoto # TODO
+from aiogram.types import Message, InputMediaPhoto 
 
 
 router = Router()
@@ -47,7 +47,7 @@ HELP_TEXT = {
 
 
 @router.message(lambda message: message.text.lower() == "помощь")
-async def user_help(message: Message, state: FSMContext): #TODO
+async def user_help(message: Message, state: FSMContext): 
     """
     Функция вызова поддержки бота
     """
