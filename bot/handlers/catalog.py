@@ -1,90 +1,16 @@
-# Обработчики каталога товаров
+"""
+Этот модуль содержит обработчики для работы с каталогом товаров.
+"""
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
+from data import PRODUCT_CATALOG
 from keyboards import catalog_keyboard, payment_methods_keyboard, item_detali_keyboard
 from states import OrderProcess
 
 router = Router()
 
-# Данные каталога товаров
-# Это пример товара который нужно доработать
-PRODUCT_CATALOG = {
-    "lollipops": {
-        "name": "Canabis Lollipops",
-        "items": [
-            {
-                "id": "101",
-                "name": "Hemperium's Original",
-                "description": """Оригинальные леденцы с каннабисом от Hemperium
-                        Леденцы с каннабисом от Hemperium стали первыми победителями
-                        Кубка каннабиса HIGH TIMES. Еще в 1999 году Hemperium
-                        с гордостью выпустил свой первый продукт собственной
-                        разработки из каннабиса: оригинальные леденцы
-                        Cannabis Lollipops, изготовленные из 100% натурального масла каннабиса.
-                        Они имели огромный успех и выиграли High Times Cannabis Cup в Амстердаме
-                        в номинации «Лучший продукт», а затем еще один первый приз
-                        на Haarlem Hemp Awards несколько недель спустя.
-                        Теперь, спустя более двух десятилетий после их появления,
-                        они по-прежнему, если не больше, являются одними из самых популярных
-                        в мире лакомств из каннабиса.
-                        Присоединяйтесь к нам, чтобы отпраздновать это знаменательное событие
-                        выпуском эксклюзивного юбилейного издания!""",
-                "price": 19},
-            {
-                "id": "102",
-                "name": "Bubblegum x Candy Kush",
-                "description": """Еще в 1999 году Hemperium с гордостью выпустила свой первый
-                          продукт собственной разработки из каннабиса:
-                          АБСОЛЮТНО оригинальные леденцы из каннабиса, изготовленные
-                          из 100% настоящего европейского масла каннабиса.
-                          Основатель компании Крис получил массу комплиментов
-                          за свое новое творение. Поэтому он решил выставить
-                          их на премию на престижном High Times Cannabis Cup,
-                          который ежегодно проводится в Амстердаме. В ноябре
-                          того же года, когда новый веб-сайт был закончен как
-                          раз вовремя, компания представила свои леденцы из
-                          каннабиса на церемонии награждения. Это оказалось
-                          огромным успехом, потому что, к удивлению Криса,
-                          Hemperium выиграл награду за лучший продукт из
-                          конопли, а несколько недель спустя эффектно последовала
-                          еще одна первая премия на премии Haarlem Hemp Awards.""",
-                "price": 19,
-            },
-            {
-                "id": "103",
-                "name": "Northern Lights x Pineapple Express",
-                "description": """Вместе с отмеченным наградами производителем конфет
-                          из каннабиса Hemperium, Dr. Greenlove производит
-                          качественные леденцы из каннабиса с широким спектром
-                          захватывающих вкусов. Hemperium вышел на сцену, когда
-                          их полностью оригинальные леденцы из каннабиса
-                          выиграли первую в истории награду за продукт на
-                          High Times Cannabis Cup в Амстердаме. Dr. Greenlove очень
-                          гордится сотрудничеством с этим легендарным производителем
-                          и первопроходцем и представляет вам совершенно новую линейку
-                          этих классических каннабисов. Это, например,
-                          Northern Lights x Pineapple Express,
-                          один из многих вкусов в коллекции.
-                """,
-                "price": 19,
-            }
-        ]
-    },
-    "accessories": {
-        "name": "thimbles",
-        "items": [
-            {
-                "id": "201",
-                "name": "orange_thimbles",
-                "description": "description",
-                "prince": "000"
-            }
-        ]
-    }
-}
 # Обработчик нажатия на кнопку каталога
-
 
 @ router.callback_query(lambda callback: callback.data.startswith("catalog_"))
 async def user_catalog(callback: CallbackQuery):
@@ -117,7 +43,7 @@ async def handle_category_selection(callback_query: CallbackQuery, state: FSMCon
         await state.update_data(selected_category=category_key)
         items = "\n\n".join([
             f"""ID: {item['id']}\nНазвание: {item['name']}\nОписание: {
-                item['description']}\nЦена: {item['price']} ZL."""
+                item['description']}\nЦена: {item['price']} PLN."""
             for item in category["items"]
         ])
         await callback_query.message.answer(f"""Категория: {category['name']}
@@ -154,7 +80,7 @@ async def handle_add_to_cart(callback: CallbackQuery, state: FSMContext):
 # Обработчик команды для просмотра корзины
 
 
-@ router.message(lambda message: message.text.lower() == "Ваша корзина")
+@ router.message(lambda message: message.text.lower() == "ваша корзина")
 async def user_view_cart(message: Message, state: FSMContext):
     """
     Извлекает данные корзины из состояния пользователя.

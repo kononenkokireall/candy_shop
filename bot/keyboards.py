@@ -27,7 +27,7 @@ def main_menu_keyboard():
 # --- Клавиатура для взаимодействия с товаром и управления корзиной ---
 
 
-def item_detali_keyboard(category_key: str):
+def item_detail_keyboard(category_key: str):
     """
     Создает инлайн-клавиатуру для взаимодействия с товаром
     Параметры:
@@ -52,16 +52,17 @@ def item_detali_keyboard(category_key: str):
 # --- Католог товаров (InlineKeyboardMarkup) ---
 
 
-def catalog_keyboard():
+def catalog_keyboard(categories: list):
     """
-    Инлайн-клавиатура для выбора категории товаров.
+    Динамическая Инлайн-клавиатура для выбора категории товаров.
+    Параметры:
+    - сategories - список словарей с полями name и key
     """
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(
-                text="Canabis Lollipops", callback_data="catalog_lollypops")],
-            [InlineKeyboardButton(
-                text="Акссесуары", callback_data="catalog_accessories")],
+                text=category['name'], callback_data=f"catalog_{category['key']}")
+             ] for category in categories
         ]
     )
 # --- Клавиатура для выбора способа оплаты (InlineKeyboardMarkup) ---
