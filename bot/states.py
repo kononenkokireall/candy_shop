@@ -11,3 +11,4 @@ class OrderProcess(StatesGroup):
     SelectItem = State()  # Выбор товара
     Payment = State()  # Выбор способа оплаты
     Confirmation = State()  # Потверждение заказа
+    SelectCity = State()  # Выбор города
