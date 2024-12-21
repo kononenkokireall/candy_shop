@@ -24,6 +24,22 @@ def main_menu_keyboard():
         resize_keyboard=True
     )
 
+# --- Клавиатура для выбора города ---
+
+
+def city_selection_keyboard():
+    """
+    Клавиатура для выбора города
+    """
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Варшава"), KeyboardButton(text="Краков")],
+            [KeyboardButton(text="Вроцлав"), KeyboardButton(text="Познань")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
 # --- Клавиатура для взаимодействия с товаром и управления корзиной ---
 
 
