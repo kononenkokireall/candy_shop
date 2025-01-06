@@ -1,7 +1,7 @@
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InputMediaPhoto
-from data import HELP_TEXT, HELP_IMAGES
+from data.help_data import HELP_TEXT, HELP_IMAGES
 
 
 router = Router()

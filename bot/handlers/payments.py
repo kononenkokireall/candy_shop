@@ -28,7 +28,7 @@ def ton_payment_description(item_name: str, item_price: int):
 
 def blik_payment_description(item_price: int):
     """
-    Функция для генерации опесания перевода через BLIK
+    Функция для генерации описания перевода через BLIK
     """
     return (
         f"Оплата через BLIK.\n\n"

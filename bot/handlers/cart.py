@@ -2,30 +2,27 @@
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from keyboards import item_detail_kb
+from aiogram.filters import Command
+from ..keyboards import item_detail_kb
+
 
 router = Router()
 
 # --- Хранилище корзины в памяти ---
-# В реальном приложении стоит использовать базу данных
 CART_STORAGE = {}
 
 # --- Функция для получения корзины пользователя ---
-
-
 def get_user_cart(user_id):
     """
     Возвращает корзину пользователя по его ID
     """
     return CART_STORAGE.setdefault(user_id, [])
 
-# --- Добовление ковара в корзину ---
-
-
+# --- Добавление ковара в корзину ---
 @router.message()
 async def add_to_cart(message: Message, state: FSMContext):
     """
-    Добавляет товар в корзину если пользаватель указал ID товара
+    Добавляет товар в корзину если пользователь указал ID товара
     """
     user_id = message.from_user.id
     user_data = await state.get_data()
@@ -49,9 +46,7 @@ async def add_to_cart(message: Message, state: FSMContext):
     await message.answer("Товар с указаным ID не найден. Попробуйте еще раз.")
 
 # --- Просмотр корзины ---
-
-
-@router.message(commands=['cart'])
+@router.message(Command(commands=['cart']))
 async def view_cart(message: Message):
     """
     Отображает содержимое корзины пользователя
@@ -71,8 +66,6 @@ async def view_cart(message: Message):
                              )
 
 # --- Очистка корзины ---
-
-
 @router.callback_query(lambda callback: callback.data == "cart_clear")
 async def clear_cart(callback_query: CallbackQuery):
     """

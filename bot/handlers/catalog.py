@@ -4,9 +4,9 @@
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from data import PRODUCT_CATALOG
-from states import OrderProcess
-from keyboards import catalog_kb, pay_methods_kb, item_detail_kb
+from ..data.catalog_data import PRODUCT_CATALOG
+from ..states import OrderProcess
+from ..keyboards import catalog_kb, pay_methods_kb, item_detail_kb
 
 router = Router()
 
@@ -15,8 +15,8 @@ router = Router()
 @ router.callback_query(lambda callback: callback.data.startswith("catalog_"))
 async def user_catalog(callback: CallbackQuery):
     """
-    Проверяет, существует ли выбранная категория в 
-    Обрабатывает выбор категории из каталога и выводит список товаров.
+    Проверяет, существует ли выбранная категория в,
+    Обработка выбор категории из каталога и выводит список товаров.
     """
     category_key = callback.data
     if category_key in PRODUCT_CATALOG:
@@ -73,7 +73,7 @@ async def handle_add_to_cart(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(
             f"""Товар {
                 item['name']}, добавлен в корзину.\n Желаете продолжить покупки?""",
-            reply_markup=catalog_kb()
+            reply_markup=catalog_kb(PRODUCT_CATALOG)
         )
     else:
         await callback.message.answer("Ошибка добавления товара в корзину.")
@@ -102,7 +102,7 @@ async def user_view_cart(message: Message, state: FSMContext):
 @ router.callback_query(lambda callback: callback.data == "choose_payment")
 async def user_choose_payment(callback: CallbackQuery, state: FSMContext):
     """
-    Устанавливает состояние пользователя как OrderProcess.Payment.
+    Устанавливает состояние пользователя как OrderProcess
     """
     await state.set_state(OrderProcess.Payment)
     await callback.message.edit_text(
