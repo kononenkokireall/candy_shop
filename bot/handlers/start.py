@@ -1,10 +1,17 @@
 # Приветствие и регистрация пользователей
+import logging
+
 from aiogram.types import Message
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from ..keyboards import main_menu_kb, catalog_kb, city_select_kb
+from ..keyboards import create_main_menu_keyboard, create_catalog_keyboard, create_city_selection_keyboard
 from ..states import OrderProcess
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 # Константы
 AVAILABLE_CITIES = ["Вроцлав", "Краков", "Варшава", "Познань"]
@@ -35,7 +42,7 @@ def is_valid_name(name: str) -> bool:
 
 def format_city(city: str) -> str:
     """Формирует название города"""
-    return city.lower().capitalize()
+    return city.strip().title()
 
 @router.message(Command('start'))
 async def cmd_start(message: Message, state: FSMContext):
@@ -43,19 +50,29 @@ async def cmd_start(message: Message, state: FSMContext):
     Обработчик команды /start.
     Приветствует пользователя и запускает процесс регистрации.
     """
-    # Проверяем, зарегистрирован ли пользователь
+    logger.info(f"Получена команда /start от пользователя {message.from_user.id}.")
     try:
+        # Проверяем, зарегистрирован ли пользователь
         user_data = await state.get_data()
-        if {"name", "city"} <= user_data.keys():
+        logger.debug(f"Текущее данные пользователя {message.from_user.id}: {user_data}")
+
+        if user_data and {"name", "city"} <= user_data.keys():
             await message.answer(
                 WELCOME_BACK_MSG.format(user_name=user_data["name"],
                                         user_city=user_data["city"]),
-                reply_markup=main_menu_kb()
+                reply_markup=create_main_menu_keyboard()
+            )
+            logger.info(
+                f"Пользователь {message.from_user.id} успешно авторизован."
+                f"Имя пользователя: {user_data['name']}, Город: {user_data['city']}."
             )
         else:
             await state.set_state(OrderProcess.Registration)
-            await message.answer(REGISTER_PROMPT, reply_markup=main_menu_kb())
+            logger.info(f"Пользователь начал регистрацию {message.from_user.id}.")
+            await message.answer(REGISTER_PROMPT, reply_markup=create_main_menu_keyboard())
     except Exception as e:
+        logger.error(f"Произошла ошибка при обработке /start для пользователя"
+                     f"{message.from_user.id}: {str(e)}.")
         await message.answer(f"Произошла ошибка: {str(e)}."
                              f" Пожалуйста, попробуйте снова.")
 
@@ -66,13 +83,16 @@ async def user_registration(message: Message, state: FSMContext):
     Сохраняет имя в состоянии и переводит пользователя на следующий шаг.
     """
     user_name = message.text.strip()
+    logger.info(f"Пользователь {message.from_user.id} вводит имя: {user_name}")
     if not is_valid_name(user_name):
+        logger.warning(f"Некорректное имя от пользователя {message.from_user.id}: {user_name}. ")
         await message.answer(NAME_INVALID_MSG)
         return
     await state.update_data(name=user_name)
+    logger.info(f"Имя {user_name} сохранено для пользователя {message.from_user.id}:")
     await state.set_state(OrderProcess.SelectCity)
     await message.answer(SELECT_CITY_PROMPT,
-                         reply_markup=city_select_kb())
+                         reply_markup=create_city_selection_keyboard())
 
 
 @router.message(OrderProcess.SelectCity)
@@ -82,21 +102,24 @@ async def user_select_city(message: Message, state: FSMContext):
     Сохраняет город в состоянии и завершает процесс регистрации.
     """
     user_city = format_city(message.text)
+    logger.info(f"Пользователь {message.from_user.id} выберает город: {user_city}.")
     if user_city not in AVAILABLE_CITIES:
+        logger.warning(f"Некорректный город от пользователя {message.from_user.id}: {user_city}.")
         await message.answer(CITY_INVALID_MSG)
         return
     await state.update_data(city=user_city)
     user_data = await state.get_data()
+    logger.info(f"Город {user_city} сохранен для пользователя {message.from_user.id}:")
     await message.answer(
         WELCOME_NEW_USER_MSG.format(user_name=user_data["name"],
                                     user_city=user_city),
-        reply_markup=catalog_kb(categories=[])
+        reply_markup=create_catalog_keyboard(categories=[])
     )
-
 
 
 @router.message(Command('change_city'))
 async def cmd_change_city(message: Message, state: FSMContext):
     """Обработчик команды /change_city."""
+    logger.info(f"Пользователь {message.from_user.id} инициировал изменение города")
     await state.set_state(OrderProcess.SelectCity)
-    await message.answer(CHANGE_CITY_PROMPT, reply_markup=city_select_kb())
+    await message.answer(CHANGE_CITY_PROMPT, reply_markup=create_city_selection_keyboard())

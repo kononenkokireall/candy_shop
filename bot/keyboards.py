@@ -1,5 +1,5 @@
-# Клавиатуры ReplyKeyboardMarkup для основных действий и InlineKeyboardMarkup
-# для уточняющих шагов.
+# Клавиатуры для основных действий пользователя
+import logging
 from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
@@ -7,119 +7,139 @@ from aiogram.types import (
     InlineKeyboardMarkup
 )
 
+# Настройки логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# --- Константы для настроек ReplyKeyboardMarkup ---
+DEFAULT_REPLY_MARKUP_SETTING = {"resize_keyboard": True}
+DEFAULT_ONETIME_REPLY_MARKUP_SETTINGS = {"resize_keyboard": True, "one_time_keyboard": True}
+
+# --- Конфигурация для динамического управления данными ---
+CITIES = ["Варшава", "Краков", "Познань", "Вроцлав"]
+MAX_CALLOW_LENGTH = 64
+
+# --- Вспомогательная функция для логирования выполнения функции ---
+def log_execution(func):
+    """Декоратор для логирования выполнения функции."""
+    def wrapper(*args, **kwargs):
+        logger.info(f"Выполнение функции {func.__name__} с аргументами: {args}, {kwargs}")
+        result = func(*args, **kwargs)
+        logger.info(f"Завершение выполнения функции {func.__name__}")
+        return result
+    return wrapper
+
+# --- Вспомогательная функция для сохранения callback_data ---
+def short_callback_data(data: str) -> str:
+    """Сокращает callback_data, если оно превышает лимит в 64 символа."""
+    if len(data) > MAX_CALLOW_LENGTH:
+        logger.warning(f"Длина callback_data превышает лимит: {data}")
+    return data[:MAX_CALLOW_LENGTH]
+
+
+# --- Вспомогательная функция для создания InlineKeyboardMarkup ---\
+@log_execution
+def create_inline_keyboard(buttons: list):
+    """
+    Создает InlineKeyboardMarkup из списка кнопок.
+    Параметры:
+    - buttons: список списков с InlineKeyboardButton.
+    Возвращает:
+    - InlineKeyboardMarkup объект.
+    """
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 # --- Основное меню (ReplyKeyboardMarkup) ---
-
-
-def main_menu_kb():
-    """
-    Клавиатура основного меню для приветствия пользователю и выбора 
-    основного действия.
-    """
+@log_execution
+def create_main_menu_keyboard():
+    """Клавиатура основного меню."""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Каталог товаров")],
             [KeyboardButton(text="Ваша Корзина"),
              KeyboardButton(text="Помощь")],
         ],
-        resize_keyboard=True
+        **DEFAULT_REPLY_MARKUP_SETTING
     )
 
 # --- Клавиатура для выбора города ---
-
-
-def city_select_kb():
-    """
-    Клавиатура для выбора города
-    """
+@log_execution
+def create_city_selection_keyboard():
+    """Клавиатура для выбора города"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Варшава"), KeyboardButton(text="Краков")],
-            [KeyboardButton(text="Вроцлав"), KeyboardButton(text="Познань")],
+            [KeyboardButton(text=city) for city in CITIES],
         ],
-        resize_keyboard=True,
-        one_time_keyboard=True
+        **DEFAULT_ONETIME_REPLY_MARKUP_SETTINGS
     )
 
 # --- Клавиатура для взаимодействия с товаром и управления корзиной ---
-
-
-def item_detail_kb(category_key: str):
-    """
-    Создает инлайн-клавиатуру для взаимодействия с товаром
-    Параметры:
-    - category_key - ключ категории товара
-    Return:
-    - InlineKeyboardMarkup с кнопками для добавления товара в корзину и 
-    возврата в каталог.
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+@log_execution
+def create_item_detail_keyboard(category_key: str):
+    """Клавиатура для взаимодействия с товаром"""
+    return create_inline_keyboard([
             [InlineKeyboardButton(text="Добавить в корзину",
-                                  callback_data=f"add_to_cart_{category_key}")],
+            callback_data=f"add_to_cart_{category_key}")],
+
             [InlineKeyboardButton(text="Вернутся в каталог",
-                                  callback_data="catalog_return")],
+            callback_data="catalog_return")],
+
             [InlineKeyboardButton(text="Очистить корзину",
-                                  callback_data="cart_clear")],
+            callback_data="cart_clear")],
+
             [InlineKeyboardButton(text="Оформить заказ",
-                                  callback_data="cart_checkout")],
-        ]
-    )
-
-# --- Католог товаров (InlineKeyboardMarkup) ---
+            callback_data="cart_checkout")],
+        ])
 
 
-def catalog_kb(categories: list):
-    """
-    Динамическая Инлайн-клавиатура для выбора категории товаров.
-    Параметры:
-    - сategories - список словарей с полями name и key
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+# --- Каталог товаров (InlineKeyboardMarkup) ---
+@log_execution
+def create_catalog_keyboard(categories: list):
+    """Динамическая клавиатура для выбора категории товаров."""
+    return create_inline_keyboard([
             [InlineKeyboardButton(
-                text=category['name'], callback_data=f"catalog_{category['key']}")
-             ] for category in categories
-        ]
-    )
+                text=category['name'],
+                callback_data=short_callback_data(f"catalog_{category['key']}")
+            )] for category in categories
+        ])
+
+
 # --- Клавиатура для выбора способа оплаты (InlineKeyboardMarkup) ---
+@log_execution
+def create_payment_methods_keyboard():
+    """Клавиатура для способа оплаты"""
+    return create_inline_keyboard([
+            [InlineKeyboardButton(text="Карта",
+                                  callback_data=short_callback_data("payment-card"))],
+            [InlineKeyboardButton(text="Наличные",
+                                  callback_data=short_callback_data("payment-cash"))],
+        ])
 
 
-def pay_methods_kb():
-    """
-    Инлайн-клавиатура для способа оплаты
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Карта", callback_data="payment-card")],
-            [InlineKeyboardButton(
-                text="Наличные", callback_data="payment-cash")],
-        ]
-    )
 # --- Подтверждение Заказа(ReplyKeyboardMarkup) ---
-
-
-def confi_kb():
-    """
-    Клавиатура для подтверждения оплаты
-    """
+@log_execution
+def create_confirmation_keyboard():
+    """Клавиатура для подтверждения оплаты"""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Подтвердить"),
              KeyboardButton(text="Отменить")],
         ],
-        resize_keyboard=True,
-        one_time_keyboard=True
+        **DEFAULT_ONETIME_REPLY_MARKUP_SETTINGS
     )
-# --- Клавиатура с ссылкой на поддержку (InlineKeyboardMarkup) ---
 
 
-def help_kb():
-    """
-    Инлайн-клавиатура для отображения ссылки на поддержку.
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+# --- Клавиатура со ссылкой на поддержку ---
+@log_execution
+def create_help_keyboard():
+    """Клавиатура для отображения ссылки на поддержку."""
+    support_url = "@CBDS_sweet"
+    if not support_url.startswith("@@CBDS_sweet") and not support_url.startswith("@CBDS_sweet"):
+        logger.error(f"Некорректный URL для поддержки: {support_url}")
+        raise ValueError(f"Некорректный URL: {support_url}")
+
+    return create_inline_keyboard([
             [InlineKeyboardButton(
-                text="@CBDS_sweet: служба поддержки", url="Ссылка на бота")],
-        ]
-    )
+                text="Служба поддержки", url=support_url)],
+        ])
