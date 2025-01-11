@@ -6,6 +6,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup
 )
+from data.catalog_data import PRODUCT_CATALOG
 
 # Настройки логирования
 logging.basicConfig(level=logging.INFO)
@@ -16,9 +17,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_REPLY_MARKUP_SETTING = {"resize_keyboard": True}
 DEFAULT_ONETIME_REPLY_MARKUP_SETTINGS = {"resize_keyboard": True, "one_time_keyboard": True}
 
+
 # --- Конфигурация для динамического управления данными ---
 CITIES = ["Варшава", "Краков", "Познань", "Вроцлав"]
 MAX_CALLOW_LENGTH = 64
+
 
 # --- Вспомогательная функция для логирования выполнения функции ---
 def log_execution(func):
@@ -29,6 +32,7 @@ def log_execution(func):
         logger.info(f"Завершение выполнения функции {func.__name__}")
         return result
     return wrapper
+
 
 # --- Вспомогательная функция для сохранения callback_data ---
 def short_callback_data(data: str) -> str:
@@ -50,29 +54,46 @@ def create_inline_keyboard(buttons: list):
     """
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-# --- Основное меню (ReplyKeyboardMarkup) ---
-@log_execution
-def create_main_menu_keyboard():
-    """Клавиатура основного меню."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Каталог товаров")],
-            [KeyboardButton(text="Ваша Корзина"),
-             KeyboardButton(text="Помощь")],
-        ],
-        **DEFAULT_REPLY_MARKUP_SETTING
-    )
+
 
 # --- Клавиатура для выбора города ---
 @log_execution
 def create_city_selection_keyboard():
     """Клавиатура для выбора города"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=city) for city in CITIES],
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=city, callback_data=f"city:{city}") for city in CITIES],
         ],
         **DEFAULT_ONETIME_REPLY_MARKUP_SETTINGS
     )
+
+
+# --- Основное меню (ReplyKeyboardMarkup) ---
+@log_execution
+def create_main_menu_keyboard():
+    """Клавиатура основного меню."""
+    return ReplyKeyboardMarkup(
+        inline_keyboard=[
+            [KeyboardButton(text="Каталог товаров", callback_data="catalog_main")],
+            [KeyboardButton(text="Ваша Корзина", callback_data="cart_main")],
+            [KeyboardButton(text="Помощь", callback_data="help_main")],
+            [KeyboardButton(text="Изменить город", callback_data="city_selection")]
+        ],
+        **DEFAULT_REPLY_MARKUP_SETTING
+    )
+
+
+# --- Каталог товаров (InlineKeyboardMarkup) ---
+@log_execution
+def create_catalog_keyboard(categories: list):
+    """Динамическая клавиатура для выбора категории товаров."""
+    return create_inline_keyboard([
+            [InlineKeyboardButton(
+                text=category['category_name'],
+                callback_data=short_callback_data(f"catalog_{category['key']}")
+            )] for category in categories
+        ])
+
 
 # --- Клавиатура для взаимодействия с товаром и управления корзиной ---
 @log_execution
@@ -90,18 +111,6 @@ def create_item_detail_keyboard(category_key: str):
 
             [InlineKeyboardButton(text="Оформить заказ",
             callback_data="cart_checkout")],
-        ])
-
-
-# --- Каталог товаров (InlineKeyboardMarkup) ---
-@log_execution
-def create_catalog_keyboard(categories: list):
-    """Динамическая клавиатура для выбора категории товаров."""
-    return create_inline_keyboard([
-            [InlineKeyboardButton(
-                text=category['name'],
-                callback_data=short_callback_data(f"catalog_{category['key']}")
-            )] for category in categories
         ])
 
 
@@ -123,8 +132,8 @@ def create_confirmation_keyboard():
     """Клавиатура для подтверждения оплаты"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Подтвердить"),
-             KeyboardButton(text="Отменить")],
+            [KeyboardButton(text="Подтвердить")],
+            [KeyboardButton(text="Отменить")],
         ],
         **DEFAULT_ONETIME_REPLY_MARKUP_SETTINGS
     )

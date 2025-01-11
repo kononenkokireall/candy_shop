@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from aiogram import Router
+from aiogram.filters import StateFilter
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
@@ -108,7 +109,7 @@ async def handle_payment_choice(callback: CallbackQuery, state: FSMContext):
         await callback.messenger.answer("Произошла ошибка. Попробуйте еще раз.")
 
 # Обработчик подтверждения платы через BLIK
-@router.message(state=PaymentStates.WARNING_BLIK_CONFIRMATION)
+@router.message(StateFilter(PaymentStates.WARNING_BLIK_CONFIRMATION))
 async def confirm_blik_payment(message: Message, state: FSMContext):
     """Функция подтверждения платы через BLIK"""
     try:
@@ -125,7 +126,7 @@ async def confirm_blik_payment(message: Message, state: FSMContext):
 
 
 # Обработчик подтверждения оплаты через TON Wallet
-@router.message(state=PaymentStates.WARNING_TON_CONFIRMATION)
+@router.message(StateFilter(PaymentStates.WARNING_TON_CONFIRMATION))
 async def confirm_ton_payment(message: Message, state: FSMContext):
     """Функция подтверждения платы через TON Wallet"""
     try:

@@ -4,7 +4,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
-from ..keyboards import create_item_detail_keyboard
+from keyboards import create_item_detail_keyboard
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO,

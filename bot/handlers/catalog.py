@@ -3,9 +3,9 @@ import logging
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from ..data.catalog_data import PRODUCT_CATALOG
-from ..states import OrderProcess
-from ..keyboards import (create_catalog_keyboard, create_payment_methods_keyboard,
+from data.catalog_data import PRODUCT_CATALOG
+from states import OrderProcess
+from keyboards import (create_catalog_keyboard, create_payment_methods_keyboard,
                          create_item_detail_keyboard)
 
 # Логирование
