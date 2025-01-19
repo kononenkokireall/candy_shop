@@ -1,10 +1,10 @@
 # Python
 *.pyc
 *.pyo
-__pycache__/
 *.pyd
 *.pdb
 *.so
+__pycache__/
 
 # Virtual Environment
 env/
@@ -18,8 +18,8 @@ venv.bak/
 Thumbs.db
 
 # IDE и редакторы
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *.iml
@@ -39,7 +39,6 @@ debug.log
 # Пакеты и зависимости
 pip-log.txt
 pip-delete-this-directory.txt
-__pycache__/
 
 # Базы данных
 *.db

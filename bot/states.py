@@ -4,8 +4,14 @@ from aiogram.fsm.state import State, StatesGroup
 
 class OrderProcess(StatesGroup):
     """Состояния для процесса взаимодействия с ботом"""
-    Registration = State() # Этап регистрации (ввод имени)
-    SelectCity = State()  # Этап Выбора города
-    SelectItem = State()  # Этап Выбора товара
-    Payment = State()  # Этап Выбора способа оплаты
-    Confirmation = State()  # Подтверждение заказа
+    name = State() # Этап регистрации (ввод имени)
+    description = State() # Этап описания товара
+    payment = State()  # Этап Выбора способа оплаты
+    add_images = State() # Этап загрузки фото
+
+    texts = {
+        'OrderProcess:name': 'Введите название заново:',
+        'OrderProcess:description': 'Введите описание заново:',
+        'OrderProcess:payment': 'Введите стоимость заново:',
+        'OrderProcess:add_images': 'Добавьте изображение меньше размером:',
+    }
