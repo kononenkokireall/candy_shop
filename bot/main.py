@@ -7,7 +7,14 @@ import signal
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+
 from dotenv import load_dotenv, find_dotenv
+
+from middlewares.db import DataBaseSession
+
+load_dotenv(find_dotenv())
+
+from database.engine import create_db, drop_db, session_marker
 
 
 # Импорт маршрутизаторов и обработчиков
@@ -15,12 +22,8 @@ from handlers.start import router as user_start
 from handlers.group_user import user_group_router
 from handlers.admin import admin_router
 
-from common.bot_cmds_list import private
 
-load_dotenv(find_dotenv())
-
-ALLOWED_UPDATES = ['message', 'edited_message']
-
+ALLOWED_UPDATES = ['message', 'edited_message', 'callback_query']
 
 # Настройка логирования
 try:
@@ -33,30 +36,40 @@ except AttributeError:
 
 logger = logging.getLogger(__name__)
 
+# Загружает токен из файла или переменной окружения.
+bot = Bot(token=os.getenv("TOKEN"),
+              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot.my_admins_list = []
+local_dp = Dispatcher()
+
+# Регистрация маршрутов
+logger.info("Регистрация маршрутов...")
+local_dp.include_router(user_start)
+local_dp.include_router(user_group_router)
+local_dp.include_router(admin_router)
+logger.info("Маршруты успешно зарегистрированы.")
+
+async def on_startup(bot):
+    run_param = False
+    if run_param:
+        await drop_db()
+    await create_db()
+
+async def on_shutdown(bot):
+    print('bot shutdown')
+
 
 async def main():
     """
     Главная асинхронная функция для запуска бота:
-    - Загружает токен из файла или переменной окружения.
-    - Инициализирует бота и диспетчер событий.
-    - Регистрирует маршруты (handlers).
+    - Инициализирует базу данных.
     - Запускает polling для обработки обновлений.
     """
-    bot = Bot(token=os.getenv("TOKEN"),
-              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    bot.my_admins_list = []
-    local_dp = Dispatcher()
-
-    # Регистрация маршрутов
-    logger.info("Регистрация маршрутов...")
-    local_dp.include_router(user_start)
-    local_dp.include_router(user_group_router)
-    local_dp.include_router(admin_router)
-    logger.info("Маршруты успешно зарегистрированы.")
-
-
+    local_dp.startup.register(on_startup)
+    local_dp.shutdown.register(on_shutdown)
+    local_dp.update.middleware(DataBaseSession(session_pool=session_marker))
     try:
-        logger.info("Удаление веб-хуков с параметром drop_pending_updates=True...")
+        logger.info("Удаление веб-хуков...")
         await bot.delete_webhook(drop_pending_updates=True)
     except Exception as e:
         logger.exception(f"Ошибка удаления веб-хуков: {str(e)}")
@@ -68,7 +81,7 @@ async def main():
     stop_event = asyncio.Event()
 
     def shutdown_signals():
-        logger.info("Получен сигнал завершения. Завершенем бота...")
+        logger.info("Получен сигнал завершения. Завершенем работу бота...")
         stop_event.set()
         loop.stop()
 
@@ -78,11 +91,11 @@ async def main():
     # Запуск polling
     try:
         logger.info("Бот зарущен. Ожидание событий...")
-        await local_dp.start_polling(bot, allowed_updates=ALLOWED_UPDATES)
+        await local_dp.start_polling(bot, allowed_updates=local_dp.resolve_used_update_types())
     finally:
-        logger.info("Закрытие сесии бота...")
+        logger.info("Закрытие сессии бота...")
         await bot.session.close()
-        logger.info("Сессия закрыта. Бот завершен.")
+        logger.info("Сессия закрыта. Бот завершил работу.")
 
 
 if __name__ == "__main__":

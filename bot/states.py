@@ -6,12 +6,14 @@ class OrderProcess(StatesGroup):
     """Состояния для процесса взаимодействия с ботом"""
     name = State() # Этап регистрации (ввод имени)
     description = State() # Этап описания товара
-    payment = State()  # Этап Выбора способа оплаты
+    price = State()  # Этап Выбора способа оплаты
     add_images = State() # Этап загрузки фото
+
+    product_for_change = None
 
     texts = {
         'OrderProcess:name': 'Введите название заново:',
         'OrderProcess:description': 'Введите описание заново:',
-        'OrderProcess:payment': 'Введите стоимость заново:',
+        'OrderProcess:price': 'Введите стоимость заново:',
         'OrderProcess:add_images': 'Добавьте изображение меньше размером:',
     }

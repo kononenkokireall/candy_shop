@@ -1,8 +1,12 @@
 from aiogram import F, types, Router
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.formatting import as_list, as_marked_section, Bold
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.orm_query import orm_get_products
 from keyboards.reply import get_keyboard
 from filters.chat_types import ChatTypeFilter
+from decimal import Decimal
 
 router = Router()
 router.message.filter(ChatTypeFilter(["private"]))
@@ -20,8 +24,14 @@ async def cmd_start(message: types.Message):
     )
 
 @router.message(F.text.lower() == "меню")
-@router.message(Command("/menu"))
-async def cmd_menu(message: types.Message):
+@router.message(Command("menu"))
+async def cmd_menu(message: types.Message, session: AsyncSession):
+    for product in await orm_get_products(session):
+        formatted_price = product.price.quantize(Decimal('1.00'))
+        await message.answer_photo(
+            product.image, caption=f"<strong>{product.name}</strong>\n{product.description}\n"
+                                   f"Стоимость: {formatted_price} PLN.",
+        )
     await message.answer('Меню Магазина: ')
 
 
