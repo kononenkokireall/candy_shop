@@ -3,9 +3,11 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class OrderProcess(StatesGroup):
+
     """Состояния для процесса взаимодействия с ботом"""
     name = State() # Этап регистрации (ввод имени)
     description = State() # Этап описания товара
+    category = State() # Этап выбора категории
     price = State()  # Этап Выбора способа оплаты
     add_images = State() # Этап загрузки фото
 
@@ -17,3 +19,6 @@ class OrderProcess(StatesGroup):
         'OrderProcess:price': 'Введите стоимость заново:',
         'OrderProcess:add_images': 'Добавьте изображение меньше размером:',
     }
+
+class AddBanner(StatesGroup):
+    image = State()
