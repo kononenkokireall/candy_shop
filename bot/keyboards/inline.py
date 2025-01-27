@@ -5,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 class MenuCallBack(CallbackData, prefix="menu"):
     level: int
     menu_name: str
+    category: int | None = None
 
 
 def get_user_main_btn(*, level: int, sizes: tuple[int] = (2,)):
@@ -32,7 +33,20 @@ def get_user_main_btn(*, level: int, sizes: tuple[int] = (2,)):
     return keyboard.adjust(*sizes).as_markup()
 
 
+def get_user_catalog_btn(*, level: int, categories: list, sizes: tuple[int] = (2,)):
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(
+        text="Назад", callback_data=MenuCallBack(level=level-1, menu_name='main').pack()
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="Корзина 🛒", callback_data=MenuCallBack(level=3, menu_name='cart').pack()
+    ))
 
+    for ctg in categories:
+        keyboard.add(InlineKeyboardButton(
+            text=ctg.name, callback_data=MenuCallBack(level=level+1, menu_name=ctg.name, category=ctg.id).pack()
+        ))
+    return keyboard.adjust(*sizes).as_markup()
 
 
 def get_callback_btn(*, btn: dict[str, str], sizes: tuple[int] = (2,)):
