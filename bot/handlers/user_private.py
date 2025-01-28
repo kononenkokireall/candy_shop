@@ -1,4 +1,4 @@
-from aiogram import F, types, Router
+from aiogram import  types, Router
 from aiogram.filters import CommandStart
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +48,8 @@ async def user_menu(callback: types.CallbackQuery, callback_data: MenuCallBack, 
         menu_name=callback_data.menu_name,
         category=callback_data.category,
         page=callback_data.page,
+        user_id=callback.from_user.id,
+        product_id=callback_data.product_id,
     )
     await callback.message.edit_media(media=media, reply_markup=reply_markup)
     await callback.answer()

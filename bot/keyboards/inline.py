@@ -93,7 +93,72 @@ def get_user_product_btn(
     return keyboard.row(*row).as_markup()
 
 
+def get_user_cart_btn(
+        *,
+        level: int,
+        page: int | None,
+        pagination_btn: dict | None,
+        product_id: int | None,
+        sizes: tuple[int] = (3,)
+):
+    keyboard = InlineKeyboardBuilder()
+    if page:
+        keyboard.add(InlineKeyboardButton(
+            text="Удалить", callback_data=MenuCallBack(
+                level=level,
+                menu_name='delete',
+                product_id=product_id,
+                page=page).pack()
+        ))
+        keyboard.add(InlineKeyboardButton(
+            text="-1", callback_data=MenuCallBack(
+                level=level,
+                menu_name='decrement',
+                product_id=product_id,
+                page=page).pack()
+        ))
+        keyboard.add(InlineKeyboardButton(
+            text="+1", callback_data=MenuCallBack(
+                level=level,
+                menu_name='increment',
+                product_id=product_id,
+                page=page).pack()
+        ))
 
+        keyboard.adjust(*sizes)
+
+        row = []
+        for text, menu_name in pagination_btn.items():
+            if menu_name == 'next':
+                row.append(InlineKeyboardButton(
+                    text=text, callback_data=MenuCallBack(
+                        level=level,
+                        menu_name=menu_name,
+                        page=page+1).pack()
+                ))
+            elif menu_name == 'prev':
+                row.append(InlineKeyboardButton(
+                    text=text, callback_data=MenuCallBack(
+                        level=level,
+                        menu_name=menu_name,
+                        page=page-1).pack()
+
+                ))
+        keyboard.row(*row)
+
+        row_2 = [
+            InlineKeyboardButton(text="Обратно в меню",
+                                 callback_data=MenuCallBack(level=0, menu_name='main').pack()),
+            InlineKeyboardButton(text="Заказать товар",
+                                 callback_data=MenuCallBack(level=0, menu_name='order').pack()),
+        ]
+        return keyboard.row(*row_2).as_markup()
+    else:
+        keyboard.add(InlineKeyboardButton(
+            text="Обратно в меню",
+            callback_data=MenuCallBack(level=0, menu_name='main').pack()
+        ))
+        return keyboard.adjust(*sizes).as_markup()
 
 
 

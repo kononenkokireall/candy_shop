@@ -189,7 +189,7 @@ async def orm_delete_from_cart(session: AsyncSession, user_id: int, product_id: 
 
 async def orm_reduce_product_in_cart(session: AsyncSession, user_id: int, product_id: int):
     query = select(Cart).where(Cart.user_id == user_id,
-                               Cart.product_id == product_id).options(joinedload(Cart.product))
+                               Cart.product_id == product_id)
     cart = await session.execute(query)
     cart = cart.scalar()
 
