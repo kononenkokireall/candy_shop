@@ -45,7 +45,7 @@ async def products(session, level, category, page):
     image = InputMediaPhoto(
         media=product_user.image,
         caption=f"<strong>{product_user.name}</strong>\n{product_user.description}\n"
-                f"Стоимость: {round(product_user.price, 2)}\n"
+                f"Стоимость: {round(product_user.price, 2)} PLN.\n"
                 f"<strong>Товар {paginator.page} из {paginator.pages}</strong>",
     )
 
@@ -103,7 +103,7 @@ async def carts(session, level, menu_name, page, user_id, product_id):
             pagination_btn=pagination_btn,
             product_id=cart.product.id,
         )
-        return image, keyboards
+    return image, keyboards
 
 
 async def get_menu_content(

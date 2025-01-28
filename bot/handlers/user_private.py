@@ -9,7 +9,7 @@ from database.orm_query import (
 
 from filters.chat_types import ChatTypeFilter
 from handlers.menu_processing import get_menu_content
-from keyboards.inline import get_callback_btn, MenuCallBack
+from keyboards.inline import MenuCallBack
 
 user_private_router = Router()
 user_private_router.message.filter(ChatTypeFilter(["private"]))

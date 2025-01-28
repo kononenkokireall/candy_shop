@@ -106,7 +106,7 @@ async def add_banner(message: types.Message, state: FSMContext, session: AsyncSe
 
 # Получение некорректного ввода от пользователя
 @admin_router.message(AddBanner.image)
-async def add_banner2(message: types.Message, state: FSMContext):
+async def add_banner2(message: types.Message):
     await message.answer("Отправьте фото баннера или отмена")
 
 
@@ -197,7 +197,7 @@ async def add_name(message: types.Message, state: FSMContext):
 
 # Handler для отлова некорректных вводов для состояния name
 @admin_router.message(OrderProcess.name)
-async def add_name2(message: types.Message, state: FSMContext):
+async def add_name2(message: types.Message):
     await message.answer("Вы ввели не допустимые данные, введите текст названия товара")
 
 
@@ -222,7 +222,7 @@ async def add_description(message: types.Message, state: FSMContext, session: As
 
 # Handler для отлова некорректных вводов для состояния description
 @admin_router.message(OrderProcess.description)
-async def add_description2(message: types.Message, state: FSMContext):
+async def add_description2(message: types.Message):
     await message.answer("Вы ввели не допустимые данные, введите текст описания товара")
 
 
@@ -240,7 +240,7 @@ async def category_choice(callback: types.CallbackQuery, state: FSMContext , ses
 
 #Ловим любые некорректные действия, кроме нажатия на кнопку выбора категории
 @admin_router.message(OrderProcess.category)
-async def category_choice2(message: types.Message, state: FSMContext):
+async def category_choice2(message: types.Message):
     await message.answer("'Выберите категорию из кнопок.'")
 
 
@@ -262,7 +262,7 @@ async def add_price(message: types.Message, state: FSMContext):
 
 # Handler для отлова некорректных вводов для состояния price
 @admin_router.message(OrderProcess.price)
-async def add_price2(message: types.Message, state: FSMContext):
+async def add_price2(message: types.Message):
     await message.answer("Вы ввели не допустимые данные, введите стоимость товара")
 
 
@@ -297,5 +297,5 @@ async def add_image(message: types.Message, state: FSMContext, session: AsyncSes
 
 # Ловим все прочее некорректное поведение для этого состояния
 @admin_router.message(OrderProcess.add_images)
-async def add_image2(message: types.Message, state: FSMContext):
+async def add_image2(message: types.Message):
     await message.answer("Отправьте фото пищи")
