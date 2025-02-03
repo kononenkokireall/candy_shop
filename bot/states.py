@@ -5,15 +5,15 @@ from aiogram.fsm.state import State, StatesGroup
 class OrderProcess(StatesGroup):
 
     """Состояния для процесса взаимодействия с ботом"""
-    name = State() # Этап регистрации (ввод имени)
-    description = State() # Этап описания товара
-    category = State() # Этап выбора категории
-    price = State()  # Этап Выбора способа оплаты
-    add_images = State() # Этап загрузки фото
+    NAME = State() # Этап регистрации (ввод имени)
+    DESCRIPTION = State() # Этап описания товара
+    CATEGORY = State() # Этап выбора категории
+    PRICE = State()  # Этап Выбора способа оплаты
+    ADD_IMAGES = State() # Этап загрузки фото
 
     product_for_change = None
 
-    texts = {
+    TEXTS = {
         'OrderProcess:name': 'Введите название заново:',
         'OrderProcess:description': 'Введите описание заново:',
         'OrderProcess:price': 'Введите стоимость заново:',
@@ -21,4 +21,4 @@ class OrderProcess(StatesGroup):
     }
 
 class AddBanner(StatesGroup):
-    image = State()
+    IMAGE = State()
