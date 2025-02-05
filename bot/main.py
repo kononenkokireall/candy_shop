@@ -2,7 +2,7 @@ import asyncio
 import os
 import logging
 
-from aiogram import Bot, Dispatcher, types  # Импорты библиотек aiogram для работы с ботом
+from aiogram import Bot, Dispatcher  # Импорты библиотек aiogram для работы с ботом
 from aiogram.client.default import DefaultBotProperties  # Настройки бота по умолчанию
 from aiogram.enums import ParseMode  # Режим форматирования сообщений (HTML, Markdown)
 
@@ -18,11 +18,11 @@ logging.basicConfig(
 load_dotenv(find_dotenv())
 
 from middlewares.db import DataBaseSession  # Middleware для работы с базой данных
-from database.engine import create_db, drop_db, session_maker  # Инструменты для управления БД
+from database.engine import create_db, session_maker  # Инструменты для управления БД
 
-from handlers.user_private import user_private_router  # Маршрутизация для приватных чатов пользователя
-from handlers.user_group import user_group_router  # Маршрутизация для групповых чатов
-from handlers.admin_private import admin_router  # Маршрутизация для чатов администратора
+from handlers.user_events.user_main import user_private_router  # Маршрутизация для приватных чатов пользователя
+from handlers.user_events.user_group import user_group_router  # Маршрутизация для групповых чатов
+from handlers.admin_events.admin_main import admin_router  # Маршрутизация для чатов администратора
 
 # Создание объекта бота с использованием токена из переменных окружения и настройкой parse_mode
 bot = Bot(token=os.getenv('TOKEN'), default=DefaultBotProperties(parse_mode=ParseMode.HTML))

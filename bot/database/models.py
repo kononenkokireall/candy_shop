@@ -1,6 +1,22 @@
 import logging
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, BigInteger, func, event
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Numeric,
+    String,
+    Text,
+    BigInteger,
+    func,
+    event
+)
+
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship
+)
 
 
 # Настройка базовой конфигурации логирования
@@ -74,7 +90,8 @@ class Product(Base):
     description: Mapped[str] = mapped_column(Text)
     price: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     image: Mapped[str] = mapped_column(String(150))
-    category_id: Mapped[int] = mapped_column(ForeignKey('category.id', ondelete='CASCADE'), nullable=False)
+    category_id: Mapped[int] = mapped_column(ForeignKey('category.id',
+                                                        ondelete='CASCADE'), nullable=False)
 
     category: Mapped['Category'] = relationship(backref='product')
 
@@ -116,10 +133,10 @@ class Cart(Base):
     __tablename__ = 'cart'
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('user.user_id', ondelete='CASCADE'), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('user.user_id',
+                                                                ondelete='CASCADE'), nullable=False)
     product_id: Mapped[int] = mapped_column(ForeignKey('product.id', ondelete='CASCADE'), nullable=False)
     quantity: Mapped[int]
-
     user: Mapped['User'] = relationship(backref='cart')
     product: Mapped['Product'] = relationship(backref='cart')
 
@@ -143,11 +160,16 @@ class Order(Base):
     __tablename__ = 'order'
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('user.user_id', ondelete='CASCADE'), nullable=False)
-    total_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)  # Общая сумма заказа
-    status: Mapped[str] = mapped_column(String(20), default='pending')  # Статус заказа
-    address: Mapped[str] = mapped_column(String(200), nullable=True)  # Адрес доставки
-    phone: Mapped[str] = mapped_column(String(13), nullable=True)  # Контактный телефон
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('user.user_id',
+                                                                ondelete='CASCADE'), nullable=False)
+    # Общая сумма заказа
+    total_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # Статус заказа
+    status: Mapped[str] = mapped_column(String(20), default='pending')
+    # Адрес доставки
+    address: Mapped[str] = mapped_column(String(200), nullable=True)
+    # Контактный телефон
+    phone: Mapped[str] = mapped_column(String(13), nullable=True)
 
     # Связи
     user: Mapped['User'] = relationship(backref='orders')
@@ -173,8 +195,10 @@ class OrderItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey('order.id', ondelete='CASCADE'), nullable=False)
     product_id: Mapped[int] = mapped_column(ForeignKey('product.id', ondelete='CASCADE'), nullable=False)
-    quantity: Mapped[int] = mapped_column(nullable=False)  # Количество товара
-    price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)  # Цена на момент покупки
+    # Количество товара
+    quantity: Mapped[int] = mapped_column(nullable=False)
+    # Цена на момент покупки
+    price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
 
     product: Mapped['Product'] = relationship(backref='order_items')
 

@@ -1,10 +1,20 @@
 import os
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from database.models import Base  # Импорты моделей (базовая мета дата SQLAlchemy)
-from database.orm_query import orm_add_banner_description, orm_create_categories  # Импорты функций для работы с БД
+# Импорты моделей (базовая мета дата SQLAlchemy)
+from database.models import Base
 
-from common.texts_for_db import categories_goods, description_for_info_pages  # Импорты данных для заполнения базы
+# Импорты функций для работы с БД
+from database.orm_querys_order.orm_query_create_order import (
+    orm_add_banner_description,
+    orm_create_categories
+)
+
+# Импорты данных для заполнения базы
+from common.texts_for_db import (
+    categories_goods,
+    description_for_info_pages
+)
 
 # Создание асинхронного движка для работы с базой данных. URL берется из переменной окружения.
 engine = create_async_engine(os.getenv('DB_URL'), echo=True)
@@ -20,12 +30,15 @@ async def create_db():
     """
     # Открываем подключение для создания таблиц
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)  # Создаем таблицы на основе метаданных моделей
+        # Создаем таблицы на основе метаданных моделей
+        await conn.run_sync(Base.metadata.create_all)
 
     # Заполнение базы начальными данными (категории и описания страниц)
     async with session_maker() as session:
-        await orm_create_categories(session, categories_goods)  # Заполняем категории товаров
-        await orm_add_banner_description(session, description_for_info_pages)  # Заполняем баннеры для страниц
+        # Заполняем категории товаров
+        await orm_create_categories(session, categories_goods)
+        # Заполняем баннеры для страниц
+        await orm_add_banner_description(session, description_for_info_pages)
 
 
 # Функция для удаления базы данных (если нужно).
@@ -35,4 +48,5 @@ async def drop_db():
     """
     # Открываем подключение для удаления таблиц
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)  # Удаляем все таблицы
+        # Удаляем все таблицы
+        await conn.run_sync(Base.metadata.drop_all)

@@ -20,7 +20,7 @@ class DataBaseSession(BaseMiddleware):
         Middleware класс DataBaseSession.
 
         Parameters:
-            session_pool (async_sessionmaker): Пул асинхронных сессий SQLAlchemy.
+            session_pool (async_session maker): Пул асинхронных сессий SQLAlchemy.
         """
         self.session_pool = session_pool
         logger.info("Инициализирован DataBaseSession middleware с переданным session_pool.")
@@ -58,7 +58,7 @@ class DataBaseSession(BaseMiddleware):
                 logger.info("Событие обработано успешно: %s", event)
                 return result
             except Exception as e:
-                # Логируем ошибку, если что-то пошло не так
+                # Лог ошибки, если что-то пошло не так
                 logger.error("Ошибка при обработке события: %s. Детали: %s", event, e)
                 raise  # Пробрасываем исключение дальше, чтобы оно могло быть обработано
             finally:

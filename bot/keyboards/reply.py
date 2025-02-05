@@ -1,7 +1,7 @@
 from aiogram.types import KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-
+# Функция создания динамической клавиатуры
 def get_keyboard(
         *btn: str,  # Переменное количество кнопок в виде строк
         placeholder: str = None,  # Текст-заполнитель для строки ввода (input placeholder)
@@ -14,7 +14,7 @@ def get_keyboard(
 
     Parameters:
         btn (str): Список текстов для кнопок.
-        placeholder (str): Плейсхолдер текстового поля.
+        placeholder (str): placeholder текстового поля.
         request_contact (int): Индекс кнопки, которая запрашивает контакт.
         request_location (int): Индекс кнопки, которая запрашивает местоположение.
         sizes (tuple[int]): Количество кнопок в строках.
@@ -40,6 +40,6 @@ def get_keyboard(
     # Настраиваем кнопки по строкам согласно параметру sizes
         reply_markup = keyboard.adjust(*sizes).as_markup(
             resize_keyboard=True,  # Уменьшаем размер клавиатуры для компактного отображения
-            input_field_placeholder=placeholder  # Устанавливаем плейсхолдер, если он указан
+            input_field_placeholder=placeholder  # Устанавливаем placeholder, если он указан
         )
         return reply_markup

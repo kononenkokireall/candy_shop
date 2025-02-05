@@ -28,7 +28,7 @@ Thumbs.db
 *.env
 .env.*
 instance/
-config.py
+utilit/config.py
 TOKEN_FILE.txt
 
 # Логи и отладочные файлы
