@@ -14,10 +14,10 @@ class OrderProcess(StatesGroup):
     product_for_change = None
 
     TEXTS = {
-        'OrderProcess:name': 'Введите название заново:',
-        'OrderProcess:description': 'Введите описание заново:',
-        'OrderProcess:price': 'Введите стоимость заново:',
-        'OrderProcess:add_images': 'Добавьте изображение меньше размером:',
+        'OrderProcess:NAME': 'Введите название заново:',
+        'OrderProcess:DESCRIPTION': 'Введите описание заново:',
+        'OrderProcess:PRICE': 'Введите стоимость заново:',
+        'OrderProcess:ADD_IMAGES': 'Добавьте изображение меньше размером:',
     }
 
 class AddBanner(StatesGroup):

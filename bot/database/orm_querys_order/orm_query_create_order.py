@@ -54,3 +54,5 @@ async def orm_add_order(
     except Exception as e:
         await session.rollback()
         raise RuntimeError(f"Ошибка при создании заказа: {str(e)}")
+
+

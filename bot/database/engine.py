@@ -1,14 +1,16 @@
-import os
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine)
 
+from dotenv import find_dotenv, load_dotenv
 # Импорты моделей (базовая мета дата SQLAlchemy)
 from database.models import Base
 
 # Импорты функций для работы с БД
-from database.orm_querys_order.orm_query_create_order import (
-    orm_add_banner_description,
-    orm_create_categories
-)
+from database.orm_querys.orm_query_banner import orm_add_banner_description
+from database.orm_querys.orm_query_category import orm_create_categories
+
 
 # Импорты данных для заполнения базы
 from common.texts_for_db import (
@@ -16,8 +18,12 @@ from common.texts_for_db import (
     description_for_info_pages
 )
 
+from utilit.config import database_url
+
+load_dotenv(find_dotenv())
+
 # Создание асинхронного движка для работы с базой данных. URL берется из переменной окружения.
-engine = create_async_engine(os.getenv('DB_URL'), echo=True)
+engine = create_async_engine(database_url)
 
 # Создание фабрики сессий (session maker) для управления асинхронными сессиями.
 session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)

@@ -1,4 +1,6 @@
 ######################## Работа с корзинами #######################################
+from typing import Optional
+
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -45,7 +47,7 @@ async def orm_get_user_carts(session: AsyncSession, user_id):
 
 
 # Удаление товара из корзины
-async def orm_delete_from_cart(session: AsyncSession, user_id: int, product_id: int):
+async def orm_delete_from_cart(session: AsyncSession, user_id: int, product_id: Optional[int] = None):
     """
     Удаляет товар из корзины по ID пользователя и ID товара.
     """

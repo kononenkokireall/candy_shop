@@ -1,8 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from handlers.menu_events.menu_main import main_menu, checkout
+from handlers.admin_events.admin_main import checkout
+from handlers.menu_events.menu_main import main_menu
 from handlers.menu_events.menu_process_cart import carts
 from handlers.menu_events.menu_process_catalog import catalog, products
+from utilit.notification import NotificationService
 
 
 # Функция для обработки запросов меню на основе уровня и действия
@@ -10,6 +12,7 @@ async def get_menu_content(
         session: AsyncSession,
         level: int,
         menu_name: str,
+        notification_service: NotificationService | None = None,
         product_id: int | None = None,
         category: int | None = None,
         page: int | None = None,
@@ -25,4 +28,4 @@ async def get_menu_content(
     elif level == 3:  # Корзина
         return await carts(session, level, menu_name, page, user_id, product_id)
     elif level == 4:  # Новый уровень для завершения покупки
-        return await checkout(session,  user_id)
+        return await checkout(session,  user_id, notification_service)

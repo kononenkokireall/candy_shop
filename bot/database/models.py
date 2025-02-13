@@ -1,5 +1,3 @@
-import logging
-
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -7,8 +5,7 @@ from sqlalchemy import (
     String,
     Text,
     BigInteger,
-    func,
-    event
+    func
 )
 
 from sqlalchemy.orm import (
@@ -17,11 +14,6 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship
 )
-
-
-# Настройка базовой конфигурации логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 
 # Базовый класс для всех моделей. Определяет стандартные столбцы `created` и `updated`.
 class Base(DeclarativeBase):
@@ -109,7 +101,7 @@ class User(Base):
     """
     __tablename__ = 'user'
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column( primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, unique=True)
     first_name: Mapped[str] = mapped_column(String(150), nullable=True)
     last_name: Mapped[str] = mapped_column(String(150), nullable=True)
@@ -201,22 +193,3 @@ class OrderItem(Base):
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
 
     product: Mapped['Product'] = relationship(backref='order_items')
-
-
-# ====== Логирование событий операций с моделями ======
-
-def after_insert(target):
-    logging.info("Вставлена запись %s: %s", target.__class__.__name__, target)
-
-def after_update(target):
-    logging.info("Обновлена запись %s: %s", target.__class__.__name__, target)
-
-def after_delete(target):
-    logging.info("Удалена запись %s: %s", target.__class__.__name__, target)
-
-
-# Автоматически навешиваем обработчики событий для всех моделей, наследующихся от Base
-for cls in Base.__subclasses__():
-    event.listen(cls, 'after_insert', after_insert)
-    event.listen(cls, 'after_update', after_update)
-    event.listen(cls, 'after_delete', after_delete)

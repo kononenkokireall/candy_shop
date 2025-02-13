@@ -1,6 +1,8 @@
 from aiogram.types import InputMediaPhoto
 
-from database.orm_querys_order.orm_query_create_order import orm_get_banner, orm_get_categories, orm_get_products
+from database.orm_querys.orm_query_banner import orm_get_banner
+from database.orm_querys.orm_query_category import orm_get_categories
+from database.orm_querys.orm_query_product import orm_get_products
 from handlers.menu_events.menu_paginator_navi import pages
 from keyboards.inline_catalog import get_user_catalog_btn
 from keyboards.inline_product import get_user_product_btn
