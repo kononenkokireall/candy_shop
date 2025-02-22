@@ -1,28 +1,19 @@
 import logging
-from typing import Tuple
 
 from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 
-from aiogram.types import InlineKeyboardButton, InputMediaPhoto, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.utils.markdown import hlink
-
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from database.models import Order, Cart, User, OrderItem, Banner
+from database.models import Order, Cart
 from database.orm_querys.orm_query_banner import (
     orm_get_info_pages,
-    orm_change_banner_image, orm_get_banner,
+    orm_change_banner_image,
 
 )
-
-from database.orm_querys.orm_query_cart import orm_get_user_carts
 from database.orm_querys.orm_query_category import orm_get_categories
-from database.orm_querys.orm_query_order import orm_delete_order
 from database.orm_querys.orm_query_product import (
     orm_get_product,
     orm_get_products,
@@ -31,12 +22,12 @@ from database.orm_querys.orm_query_product import (
     orm_delete_product
 )
 from filters.chat_types import ChatTypeFilter, IsAdmin
-from utilit.config import settings
-from keyboards.inline_main import get_callback_btn, MenuCallBack
-from keyboards.linline_admin import build_admin_keyboard
+
+from keyboards.inline_main import get_callback_btn
+
 from keyboards.reply import get_keyboard
+
 from states.states import OrderProcess, AddBanner
-from utilit.notification import NotificationService
 
 # Создаем роутер для работы с администраторами
 admin_router = Router()
@@ -331,10 +322,6 @@ async def add_banner2(message: types.Message):
     await message.answer("Отправьте фото баннера или отмена")
 
 
-
-
-
-
 ##############################Handler Изменение фото товара для администратора#########################################
 
 # Handler для добавления/изменения изображения товара
@@ -410,202 +397,3 @@ async def confirm_order(callback: types.CallbackQuery, session: AsyncSession):
     )
     await callback.answer()
 
-
-
-##############################Handler перехода в чат пользователя с администратором####################################
-
-async def checkout(
-    session: AsyncSession,
-    user_id: int,
-    notification_service: NotificationService) -> Tuple[InputMediaPhoto, InlineKeyboardMarkup]:
-    """
-    Оформление заказа и переход в чат с администратором
-
-    Args:
-        session: Асинхронная сессия БД
-        user_id: ID пользователя
-        notification_service: Сервис уведомлений
-
-    Returns:
-        (InputMediaPhoto, InlineKeyboardMarkup): Медиа-контент и клавиатура
-
-    Raises:
-        ValueError: Если корзина пуста
-    """
-    try:
-        logger.info(f"Начало оформления заказа для пользователя {user_id}")
-
-        async with session.begin():
-            # Получаем данные
-            logger.debug("Получение баннера заказа")
-            banner = await orm_get_banner(session, 'order')
-
-            logger.debug(f"Получение корзины пользователя {user_id}")
-            carts_user = await orm_get_user_carts(session, user_id)
-
-            # Проверка пустой корзины
-            if not carts_user:
-                logger.warning(f"Корзина пользователя {user_id} пуста")
-                raise ValueError("Корзина пользователя пуста")
-
-            # Создание заказа
-            logger.debug("Расчет общей стоимости заказа")
-            total_price = sum(item.quantity * item.product.price for item in carts_user)
-
-            logger.debug("Создание заказа")
-            order = Order(
-                user_id=user_id,
-                total_price=total_price,
-                status="pending"
-            )
-            session.add(order)
-            await session.flush()
-
-            # Добавление позиций заказа
-            logger.debug("Добавление позиций заказа")
-            order_items = [
-                OrderItem(
-                    order_id=order.id,
-                    product_id=item.product_id,
-                    quantity=item.quantity,
-                    price=item.product.price
-                )
-                for item in carts_user
-            ]
-            session.add_all(order_items)
-
-            # Очистка корзины
-            logger.debug(f"Очистка корзины пользователя {user_id}")
-            await orm_delete_order(session, user_id)
-
-        # Отправка уведомлений
-        logger.debug("Форматирование уведомления для администратора")
-        admin_message = await format_admin_notification(session, order.id)  # Используем обновленную функцию
-        await notification_service.send_to_admin(admin_message)
-
-        logger.debug("Форматирование ответа для пользователя")
-        user_content = format_user_response(banner, total_price)
-
-        logger.info(f"Заказ для пользователя {user_id} успешно оформлен")
-        return user_content
-
-    except ValueError as ve:
-        logger.error(f"Ошибка валидации: {ve}", exc_info=True)
-        raise
-    except Exception as e:
-        logger.error(f"Ошибка оформления заказа: {e}", exc_info=True)
-        raise
-
-# ##############################Handler уведомления информации о заказе для администратора###############################
-
-async def format_admin_notification(session: AsyncSession, order_id: int) -> str:
-    """
-    Форматирование уведомления для администратора о новом заказе.
-
-    Args:
-        session: Асинхронная сессия БД.
-        order_id: ID заказа.
-
-    Returns:
-        str: Форматированное сообщение для администратора.
-    """
-    try:
-        # Получаем заказ с предварительной загрузкой связанных данных
-        stmt = (
-            select(Order)
-            .options(
-                selectinload(Order.user),  # Загружаем пользователя
-                selectinload(Order.items).selectinload(OrderItem.product),  # Загружаем товары
-            )
-            .where(Order.id == order_id)  # Фильтруем по ID заказа
-        )
-
-        # Выполняем запрос
-        result = await session.execute(stmt)
-        order = result.scalars().first()
-
-        if order is None:
-            logging.warning(f"Заказ #{order_id} не найден")
-            return "Заказ не найден"
-
-        # Получаем пользователя
-        user = order.user
-        if user is None:
-            logging.warning(f"Пользователь для заказа #{order_id} не найден")
-            return "Пользователь не найден"
-
-        # Форматируем ссылку на пользователя
-        if user.first_name:
-            user_line = f"[{user.first_name}](tg://user?id={user.user_id})"
-        else:
-            user_line = "не указано"
-
-        # Форматируем список товаров
-        items_text = "\n".join(
-            f"• {item.product.name} (x{item.quantity}) - {item.price} PLN"
-            for item in order.items
-        )
-
-        # Форматируем итоговое сообщение
-        formatted_message = (
-            f"🎉 *Новый заказ #{order.id}* 🎉\n\n"
-            f"👤 Пользователь: {user_line}\n"
-            f"📱 ID: {user.user_id if user else 'не указан'}\n"
-            f"📞 Контакт: {user.phone or 'не указан'}\n"
-            f"💵 Общая сумма: {order.total_price} PLN\n"
-            f"📦 Статус: {order.status}\n\n"
-            f"**Состав заказа:**\n{items_text}"
-        )
-
-        return formatted_message
-
-    except Exception as e:
-        logging.error(f"Ошибка при форматировании уведомления для заказа #{order_id}: {e}", exc_info=True)
-        raise
-##########################Handler формирование деталей заказа пользователя для администратора##########################
-
-async def notify_admin(
-    session: AsyncSession,
-    order_id: int,
-    notification_service: NotificationService,
-) -> None:
-    """
-    Уведомление администратора о новом заказе.
-
-    Args:
-        session: Асинхронная сессия БД.
-        order_id: ID заказа.
-        notification_service: Сервис уведомлений.
-    """
-    try:
-        # Форматирование сообщения для администратора
-        admin_message = await format_admin_notification(session, order_id)
-        keyboard = build_admin_keyboard(order_id)
-
-        # Отправка уведомления через notification_service
-        await notification_service.send_to_admin(
-            text=admin_message,
-            reply_markup=keyboard,
-            parse_mode="MarkdownV2"
-        )
-
-    except Exception as e:
-        logging.error(f"Ошибка уведомления администратора: {e}", exc_info=True)
-        raise
-
-
-def format_user_response(banner: Banner, total_price: float) -> Tuple[InputMediaPhoto, InlineKeyboardMarkup]:
-    """Формирование ответа пользователю"""
-    caption = (
-        f"🎉 Спасибо за покупку! 🎉\n\n"
-        f"Общая сумма заказа: {total_price} PLN"
-    )
-    media = InputMediaPhoto(media=banner.image, caption=caption)
-
-    keyboard = InlineKeyboardBuilder()
-    keyboard.add(InlineKeyboardButton(
-        text="Обратно в меню",
-        callback_data=MenuCallBack(level=0, menu_name='main').pack()
-    ))
-
-    return media, keyboard.as_markup()

@@ -4,6 +4,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from keyboards.inline_main import MenuCallBack
 
+
 # Функция для создания клавиатуры покупки продукта
 def get_user_product_btn(
         *,

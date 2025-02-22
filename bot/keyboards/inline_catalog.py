@@ -4,6 +4,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from keyboards.inline_main import MenuCallBack
 
+
 # Функция для создания клавиатуры каталога
 def get_user_catalog_btn(*, level: int, categories: list, sizes: tuple[int] = (2,)):
     keyboard = InlineKeyboardBuilder()

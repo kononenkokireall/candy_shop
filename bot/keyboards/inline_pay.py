@@ -2,6 +2,7 @@
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+
 # Функция для создания клавиатуры подтверждения оплаты
 def get_payment_keyboard(order_id: int, user_id=None):
     keyboard = InlineKeyboardBuilder()

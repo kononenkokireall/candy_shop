@@ -15,6 +15,7 @@ from sqlalchemy.orm import (
     relationship
 )
 
+
 # Базовый класс для всех моделей. Определяет стандартные столбцы `created` и `updated`.
 class Base(DeclarativeBase):
     """
@@ -101,7 +102,7 @@ class User(Base):
     """
     __tablename__ = 'user'
 
-    id: Mapped[int] = mapped_column( primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, unique=True)
     first_name: Mapped[str] = mapped_column(String(150), nullable=True)
     last_name: Mapped[str] = mapped_column(String(150), nullable=True)
@@ -186,7 +187,7 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey('order.id', ondelete='CASCADE'), nullable=False)
-    product_id: Mapped[int] = mapped_column(ForeignKey('product.id', ondelete='CASCADE'), nullable=False)
+    product_id: Mapped[int] = mapped_column(ForeignKey('product.id', ondelete='SET NULL'), nullable=False)
     # Количество товара
     quantity: Mapped[int] = mapped_column(nullable=False)
     # Цена на момент покупки

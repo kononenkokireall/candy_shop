@@ -1,9 +1,9 @@
+import logging
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
-    create_async_engine)
-
-from dotenv import find_dotenv, load_dotenv
+    create_async_engine
+)
 # Импорты моделей (базовая мета дата SQLAlchemy)
 from database.models import Base
 
@@ -11,22 +11,25 @@ from database.models import Base
 from database.orm_querys.orm_query_banner import orm_add_banner_description
 from database.orm_querys.orm_query_category import orm_create_categories
 
-
 # Импорты данных для заполнения базы
 from common.texts_for_db import (
     categories_goods,
     description_for_info_pages
 )
-
 from utilit.config import database_url
 
-load_dotenv(find_dotenv())
-
 # Создание асинхронного движка для работы с базой данных. URL берется из переменной окружения.
-engine = create_async_engine(database_url)
+engine = create_async_engine(database_url, echo=True)
 
 # Создание фабрики сессий (session maker) для управления асинхронными сессиями.
 session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 # Функция для создания базы данных и первоначального заполнения данными.
@@ -34,17 +37,19 @@ async def create_db():
     """
     Создает все таблицы в базе данных и заполняет ее начальными данными (категории и описания баннеров).
     """
-    # Открываем подключение для создания таблиц
+    logging.info("Создание таблиц в базе данных...")
     async with engine.begin() as conn:
-        # Создаем таблицы на основе метаданных моделей
+        logging.info("Соединение с базой данных установлено.")
         await conn.run_sync(Base.metadata.create_all)
+        logging.info("Таблицы созданы.")
 
-    # Заполнение базы начальными данными (категории и описания страниц)
+    logging.info("Заполнение базы начальными данными...")
     async with session_maker() as session:
-        # Заполняем категории товаров
+        logging.info("Сессия создана.")
         await orm_create_categories(session, categories_goods)
-        # Заполняем баннеры для страниц
         await orm_add_banner_description(session, description_for_info_pages)
+        logging.info("Данные добавлены.")
+    logging.info("Сессия закрыта.")
 
 
 # Функция для удаления базы данных (если нужно).
@@ -52,7 +57,18 @@ async def drop_db():
     """
     Удаляет все таблицы из базы данных.
     """
-    # Открываем подключение для удаления таблиц
+    logging.info("Удаление таблиц из базы данных...")
     async with engine.begin() as conn:
-        # Удаляем все таблицы
+        logging.info("Соединение с базой данных установлено.")
         await conn.run_sync(Base.metadata.drop_all)
+        logging.info("Таблицы удалены.")
+
+
+# Функция для закрытия пула соединений движка.
+async def dispose_engine():
+    """
+    Закрывает пул соединений движка.
+    """
+    logging.info("Закрытие пула соединений...")
+    await engine.dispose()
+    logging.info("Пул соединений закрыт.")

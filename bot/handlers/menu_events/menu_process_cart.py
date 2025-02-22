@@ -1,8 +1,12 @@
 from aiogram.types import InputMediaPhoto
 
 from database.orm_querys.orm_query_banner import orm_get_banner
-from database.orm_querys.orm_query_cart import orm_delete_from_cart, orm_reduce_product_in_cart, orm_add_to_cart, \
+from database.orm_querys.orm_query_cart import (
+    orm_delete_from_cart,
+    orm_reduce_product_in_cart,
+    orm_add_to_cart,
     orm_get_user_carts
+)
 from handlers.menu_events.menu_paginator_navi import pages
 from keyboards.inline_cart import get_user_cart_btn
 from utilit.paginator import Paginator
