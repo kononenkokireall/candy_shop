@@ -4,16 +4,16 @@ from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 
-from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Order, Cart
+from database.models import Order
 from database.orm_querys.orm_query_banner import (
     orm_get_info_pages,
     orm_change_banner_image,
 
 )
 from database.orm_querys.orm_query_category import orm_get_categories
+from database.orm_querys.orm_query_order import get_order_by_id
 from database.orm_querys.orm_query_product import (
     orm_get_product,
     orm_get_products,
@@ -21,9 +21,11 @@ from database.orm_querys.orm_query_product import (
     orm_add_product,
     orm_delete_product
 )
+
 from filters.chat_types import ChatTypeFilter, IsAdmin
 
 from keyboards.inline_main import get_callback_btn
+from keyboards.linline_admin import OrderAction
 
 from keyboards.reply import get_keyboard
 
@@ -377,23 +379,113 @@ async def delete_product_callback(callback: types.CallbackQuery, session: AsyncS
 
 ##############################Handler подтверждения оплаты товара для администратора###################################
 
-# Функция подтверждения заказа администратором
-@admin_router.callback_query(F.data.startswith("confirm_order_"))
-async def confirm_order(callback: types.CallbackQuery, session: AsyncSession):
-    order_id = int(callback.data.split("_")[-1])
+# Обработчик для подтверждения заказа (кнопка "✅ Подтвердить заказ")
+# 2. Обработчик с правильным использованием фильтров
+@admin_router.callback_query(
+    OrderAction.filter(F.callback_data.action == "confirm")
+)
+async def confirm_order_handler(
+        callback: types.CallbackQuery,
+        callback_data: OrderAction,
+        session: AsyncSession
+):
+    try:
+        # 3. Получение данных из callback_data
+        order_id = callback_data.order_id
 
-    # Очищаем корзину пользователя
-    order = await session.get(Order, order_id)
-    await session.execute(delete(Cart)
-                          .where(Cart.user_id == order.user_id))
+        # 4. Получение заказа с блокировкой для избежания race condition
+        async with session.begin():
+            order = await session.get(
+                Order,
+                order_id,
+                with_for_update=True  # Блокировка записи
+            )
 
-    # Обновляем статус заказа
-    order.status = "completed"
-    await session.commit()
+            if not order:
+                await callback.answer("🚨 Заказ не найден", show_alert=True)
+                return
 
-    await callback.message.edit_text(
-        f"✅ Заказ #{order_id} подтвержден и оплачен!",
-        reply_markup=None
-    )
-    await callback.answer()
+            if order.status == "confirmed":
+                await callback.answer("ℹ️ Заказ уже подтвержден")
+                return
 
+            # 5. Обновление статуса
+            order.status = "confirmed"
+            await session.commit()
+
+            # 6. Отправка уведомления пользователю
+            try:
+                await callback.bot.send_message(
+                    chat_id=order.user_id,
+                    text=(
+                        "🎉 <b>Ваш заказ подтвержден!</b>\n\n"
+                        "✅ Оплата прошла успешно\n"
+                        "📦 Забрать можно по адресу: ул. Примерная, 123"
+                    ),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка отправки уведомления: {e}")
+
+            await callback.answer("✅ Заказ подтвержден")
+
+    except Exception as e:
+        logger.error(f"Ошибка подтверждения: {e}", exc_info=True)
+        await session.rollback()
+        await callback.answer("🚨 Ошибка подтверждения заказа", show_alert=True)
+
+
+# Обработчик для отмены заказа (кнопка "❌ Отменить заказ")
+@admin_router.callback_query(
+    OrderAction.filter(F.callback_data.action == "cancel")
+)
+async def cancel_order_handler(
+        callback: types.CallbackQuery,
+        callback_data: OrderAction,
+        session: AsyncSession
+):
+    try:
+        # Используем контекстный менеджер для транзакции
+        async with session.begin():
+            # Получаем заказ с блокировкой записи
+            order = await session.get(
+                Order,
+                callback_data.order_id,
+                with_for_update=True  # Блокировка для конкурентного доступа
+            )
+
+            if not order:
+                await callback.answer("🚨 Заказ не найден", show_alert=True)
+                return
+
+            if order.status == "cancelled":
+                await callback.answer("ℹ️ Заказ уже отменен")
+                return
+
+            # Обновляем статус
+            order.status = "cancelled"
+
+            # Коммит транзакции
+            await session.commit()
+
+            # Отправка уведомления
+            try:
+                await callback.bot.send_message(
+                    chat_id=order.user_id,
+                    text=(
+                        "❌ <b>Заказ отменен</b>\n\n"
+                        "Администратор отменил ваш заказ. "
+                        "Для уточнения деталей свяжитесь с поддержкой."
+                    ),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка отправки уведомления: {e}")
+                raise
+
+            await callback.answer("✅ Заказ отменен")
+
+    except Exception as e:
+        logger.error(f"Ошибка отмены: {e}", exc_info=True)
+        await session.rollback()
+        await callback.answer("🚨 Ошибка отмены заказа", show_alert=True)

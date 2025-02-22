@@ -1,4 +1,6 @@
 import logging
+from typing import Optional
+
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -153,6 +155,23 @@ async def orm_update_order_status(session: AsyncSession, order_id: int, new_stat
     await session.execute(query)
     await session.commit()
     logger.info(f"Статус заказа {order_id} обновлен на {new_status}")
+
+
+async def get_order_by_id(session: AsyncSession, order_id: int) -> Optional[Order]:
+    """
+    Получение объекта заказа по его идентификатору.
+
+    Args:
+        session (AsyncSession): Асинхронная сессия для работы с базой данных.
+        order_id (int): Идентификатор заказа.
+
+    Returns:
+        Order или None: Объект заказа, если найден, иначе None.
+    """
+    query = select(Order).where(Order.id == order_id)
+    result = await session.execute(query)
+    order = result.scalar_one_or_none()
+    return order
 
 
 # Удаление заказа
