@@ -28,57 +28,48 @@ logger = logging.getLogger(__name__)
 async def checkout(
         session: AsyncSession,
         user_id: int,
-        notification_service: NotificationService) -> Tuple[InputMediaPhoto, InlineKeyboardMarkup]:
+        notification_service: NotificationService
+) -> Tuple[InputMediaPhoto, InlineKeyboardMarkup]:
     """
     Оформление заказа и переход в чат с администратором
     """
+    # Инициализация значения по умолчанию
+    user_content = (
+        InputMediaPhoto(media="default_banner.jpg", caption="Ошибка оформления заказа!"),
+        InlineKeyboardMarkup(inline_keyboard=[])
+    )
+
     try:
         logger.info(f"Начало оформления заказа для пользователя {user_id}")
 
         async with session.begin():
             # Получаем данные
-            logger.debug("Получение баннера заказа")
             banner = await orm_get_banner(session, 'order')
-            logger.debug(f"Получение корзины пользователя {user_id}")
             carts_user = await orm_get_user_carts(session, user_id)
 
-            # Проверка пустой корзины
             if not carts_user:
                 logger.warning(f"Корзина пользователя {user_id} пуста")
-                raise ValueError("Корзина пользователя пуста")
+                return user_content  # Возвращаем заглушку
 
             # Создание заказа
-            logger.debug("Расчет общей стоимости заказа")
             total_price = sum(item.quantity * item.product.price for item in carts_user)
-            logger.debug("Создание заказа")
-            order = Order(
-                user_id=user_id,
-                total_price=total_price,
-                status="pending"
-            )
+            order = Order(user_id=user_id, total_price=total_price, status="pending")
             session.add(order)
             await session.flush()
 
-            # Добавление позиций заказа
-            logger.debug("Добавление позиций заказа")
             order_items = [
                 OrderItem(
                     order_id=order.id,
                     product_id=item.product_id,
                     quantity=item.quantity,
                     price=item.product.price
-                )
-                for item in carts_user
+                ) for item in carts_user
             ]
             session.add_all(order_items)
 
-            # Очистка корзины
-            logger.debug(f"Очистка корзины пользователя {user_id}")
             await orm_delete_from_cart(session, user_id)
 
-
-            # Отправка уведомлений
-            logger.debug("Форматирование уведомления для администратора")
+            # Уведомления
             admin_text, admin_keyboard = await format_admin_notification(order.id)
             await notification_service.send_to_admin(
                 text=admin_text,
@@ -86,18 +77,15 @@ async def checkout(
                 parse_mode="HTML"
             )
 
-            logger.debug("Форматирование ответа для пользователя")
+            # Формирование ответа
             user_content = format_user_response(banner, total_price, order_items)
 
         logger.info(f"Заказ для пользователя {user_id} успешно оформлен")
         return user_content
 
-    except ValueError as ve:
-        logger.error(f"Ошибка валидации: {ve}", exc_info=True)
-        raise
     except Exception as e:
         logger.error(f"Ошибка оформления заказа: {e}", exc_info=True)
-        raise
+        return user_content
 
 
 async def format_admin_notification(order_id: int) -> tuple[str, InlineKeyboardMarkup]:

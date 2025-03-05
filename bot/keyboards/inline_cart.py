@@ -18,21 +18,21 @@ def get_user_cart_btn(
     if page:  # Если номер страницы задан
         # Кнопки для управления продуктами (удаление, увеличение/уменьшение количества)
         keyboard.add(InlineKeyboardButton(
-            text="Удалить", callback_data=MenuCallBack(
+            text="❌ Удалить", callback_data=MenuCallBack(
                 level=level,
                 menu_name='delete',
                 product_id=product_id,
                 page=page).pack()
         ))
         keyboard.add(InlineKeyboardButton(
-            text="-1", callback_data=MenuCallBack(
+            text="➖", callback_data=MenuCallBack(
                 level=level,
                 menu_name='decrement',
                 product_id=product_id,
                 page=page).pack()
         ))
         keyboard.add(InlineKeyboardButton(
-            text="+1", callback_data=MenuCallBack(
+            text="➕", callback_data=MenuCallBack(
                 level=level,
                 menu_name='increment',
                 product_id=product_id,
@@ -64,11 +64,11 @@ def get_user_cart_btn(
         # Дополнительные действия (оформление заказа, возврат в меню)
         row_2 = [
             InlineKeyboardButton(
-                text="Обратно в меню",
+                text="🏠Меню",
                 callback_data=MenuCallBack(level=0, menu_name='main').pack()
             ),
             InlineKeyboardButton(
-                text="Оформить заказ",
+                text="Оформление 🚀",
                 callback_data=MenuCallBack(level=4, menu_name='checkout').pack()
             ),
         ]
@@ -76,7 +76,7 @@ def get_user_cart_btn(
     else:
         # Если страница не задана, только кнопка возврата в меню
         keyboard.add(InlineKeyboardButton(
-            text="Обратно в меню",
+            text="🏠Обратно в меню",
             callback_data=MenuCallBack(
                 level=0,
                 menu_name='main').pack()

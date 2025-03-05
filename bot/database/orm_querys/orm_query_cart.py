@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from database.models import Cart
 
-# Настройка логгера
+# Настройка логгер
 logger = logging.getLogger(__name__)
 
 ######################## Работа с корзинами #######################################

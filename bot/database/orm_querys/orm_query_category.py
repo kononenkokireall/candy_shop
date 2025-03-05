@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Category
 
-# Настройка логгера
+# Настройка логгер
 logger = logging.getLogger(__name__)
 
 

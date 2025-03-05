@@ -47,7 +47,7 @@ def build_user_keyboard() -> InlineKeyboardMarkup:
             url=f"tg://user?id={settings.ADMIN_CHAT_ID}"
         ),
         InlineKeyboardButton(
-            text="🔙 Обратно в меню",
+            text="🏠Обратно в меню",
             callback_data=MenuCallBack(level=0, menu_name='main').pack()
         )
     )

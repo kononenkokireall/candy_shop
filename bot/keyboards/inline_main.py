@@ -2,6 +2,8 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from pydantic.v1 import validator
+
 
 # Определение структуры данных для меню обратного вызова
 class MenuCallBack(CallbackData, prefix="menu"):
@@ -10,6 +12,12 @@ class MenuCallBack(CallbackData, prefix="menu"):
     category: int | None = None  # ID категории (если требуется)
     page: int = 1  # Номер страницы меню
     product_id: int | None = None  # ID продукта (если требуется)
+
+    @validator('level') #TODO
+    def validate_level(self, v):
+        if v < 0:
+            raise ValueError("Level cannot be negative")
+        return v
 
 
 # Определение структуры данных для управления действиями по заказу
@@ -23,7 +31,7 @@ def get_user_main_btn(*, level: int, sizes: tuple[int] = (2,)):
     keyboard = InlineKeyboardBuilder()
     # Определение кнопок и их назначения
     btn = {
-        "Товары 🍭|💨": "catalog",
+        "Товары 🍭 💨": "catalog",
         "Корзина 🛒": "cart",
         "О нас 💬": "about",
         "Оплата 💳": "payment",

@@ -26,18 +26,28 @@ async def orm_add_banner_description(session: AsyncSession, data: dict):
         return
 
     logger.info(f"Добавление {len(data)} новых баннеров")
-    session.add_all([Banner(name=name, description=description) for name, description in data.items()])
+    session.add_all([Banner(
+        name=name,
+        description=description
+    ) for name, description in data.items()])
     await session.commit()
     logger.info("Баннеры успешно добавлены")
 
 
-async def orm_change_banner_image(session: AsyncSession, name: str, image: str, admin_link: str | None = None):
+async def orm_change_banner_image(
+        session: AsyncSession,
+        name: str,
+        image: str,
+        admin_link: str | None = None
+):
     """
     Изменяет изображение и (опционально) ссылку администратора для баннера с заданным именем.
     """
     logger.info(f"Обновление изображения баннера '{name}'")
 
-    query = update(Banner).where(Banner.name == name).values(image=image, admin_link=admin_link)
+    query = (update(Banner).where(
+        Banner.name == name)
+             .values(image=image, admin_link=admin_link))
     result = await session.execute(query)
     await session.commit()
 

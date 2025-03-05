@@ -10,7 +10,7 @@ def get_user_catalog_btn(*, level: int, categories: list, sizes: tuple[int] = (2
     keyboard = InlineKeyboardBuilder()
     # Добавление кнопки "Назад"
     keyboard.add(InlineKeyboardButton(
-        text="◀️Вернутся назад",
+        text="◀️Вернутся",
         callback_data=MenuCallBack(
             level=level - 1,
             menu_name='main').pack()

@@ -25,7 +25,7 @@ def get_keyboard(
 
     for index, text in enumerate(btn, start=0):
 
-        if request_contact and request_contact == index:
+        if request_contact is not None and request_contact == index:
             keyboard.add(KeyboardButton(text=text, request_contact=True))
 
         elif request_location and request_location == index:

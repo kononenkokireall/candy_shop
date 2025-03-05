@@ -32,3 +32,5 @@ async def get_menu_content(
         return await carts(session, level, menu_name, page, user_id, product_id)
     elif level == 4:  # Новый уровень для завершения покупки
         return await checkout(session, user_id, notification_service)
+    else:
+        raise ValueError(f"Недопустимый уровень: {level}")

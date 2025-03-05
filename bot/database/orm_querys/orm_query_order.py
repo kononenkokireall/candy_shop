@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from database.models import Product, Order, OrderItem
 
-# Настройка логгера
+# Настройка логгер
 logger = logging.getLogger(__name__)
 
 
