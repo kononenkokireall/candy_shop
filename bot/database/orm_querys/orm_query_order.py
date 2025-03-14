@@ -1,183 +1,246 @@
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Sequence
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, exc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload, joinedload
 
 from database.models import Product, Order, OrderItem
 
-# Настройка логгер
 logger = logging.getLogger(__name__)
 
 
-# Создание заказа
-async def orm_add_order(
+async def orm_create_order(
         session: AsyncSession,
         user_id: int,
         total_price: float,
-        items: list[dict],
-        address: str | None = None,
-        phone: str | None = None,
+        items: List[Dict],
+        address: Optional[str] = None,
+        phone: Optional[str] = None,
         status: str = "pending"
-):
+) -> Order:
     """
-    Создает новый заказ. Проверяет корректность данных и существование товаров.
+    Создает новый заказ с полной валидацией и обработкой ошибок.
+
+    Параметры:
+        session: Асинхронная сессия БД
+        user_id: ID пользователя
+        total_price: Общая сумма заказа
+        items: Список товаров в заказе
+        address: Адрес доставки (опционально)
+        phone: Телефон для связи (опционально)
+        status: Статус заказа (по умолчанию "pending")
+
+    Возвращает:
+        Order: Созданный объект заказа
+
+    Исключения:
+        ValueError: При некорректных входных данных
+        RuntimeError: При ошибках работы с БД
     """
-    logger.info(f"Создание заказа для пользователя {user_id} на сумму {total_price}")
+    logger.info(f"Создание заказа для пользователя {user_id}")
 
-    if not isinstance(items, list):
-        logger.error("Ошибка: items должен быть списком")
-        raise ValueError("items должен быть списком")
+    # Валидация входных данных
+    if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+        logger.error("Некорректный формат items: должен быть список словарей")
+        raise ValueError("Items должен быть списком словарей")
 
-    for item in items:
-        if not all(key in item for key in ("product_id", "quantity", "price")):
-            logger.error("Ошибка: Неверная структура items")
-            raise ValueError("Каждый элемент items должен содержать product_id, quantity и price")
+    required_keys = {"product_id", "quantity", "price"}
+    for idx, item in enumerate(items, 1):
+        missing = required_keys - item.keys()
+        if missing:
+            logger.error(f"Элемент {idx}: отсутствуют ключи {missing}")
+            raise ValueError(f"Элемент {idx}: отсутствуют ключи {missing}")
 
         if item["quantity"] < 1:
-            logger.error(f"Ошибка: Некорректное количество для продукта {item['product_id']}")
-            raise ValueError(f"Некорректное количество для продукта {item['product_id']}")
+            logger.error(f"Элемент {idx}: некорректное количество")
+            raise ValueError(f"Элемент {idx}: количество должно быть больше 0")
 
-        if item["price"] < 0:
-            logger.error(f"Ошибка: Некорректная цена для продукта {item['product_id']}")
-            raise ValueError(f"Некорректная цена для продукта {item['product_id']}")
+        if item["price"] <= 0:
+            logger.error(f"Элемент {idx}: некорректная цена")
+            raise ValueError(f"Элемент {idx}: цена должна быть больше 0")
 
-    # Проверяем существование товаров
+    # Проверка существования товаров
     product_ids = [item["product_id"] for item in items]
-    existing_products = await session.execute(select(Product.id).where(Product.id.in_(product_ids)))
-    existing_ids = {row[0] for row in existing_products.all()}
+    try:
+        existing = await session.execute(
+            select(Product.id).where(Product.id.in_(product_ids))
+        )
+        existing_ids = {row.id for row in existing.scalars()}
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Ошибка проверки товаров: {str(e)}")
+        raise RuntimeError("Ошибка проверки товаров") from e
 
     missing_ids = set(product_ids) - existing_ids
     if missing_ids:
-        logger.error(f"Ошибка: Товары с ID {missing_ids} не найдены")
-        raise ValueError(f"Товары с ID {missing_ids} не найдены")
+        logger.error(f"Не найдены товары с ID: {missing_ids}")
+        raise ValueError(f"Несуществующие товары: {missing_ids}")
+
+    # Создание заказа в транзакции
+    try:
+        async with session.begin():
+            # Создаем основной заказ
+            order = Order(
+                user_id=user_id,
+                total_price=total_price,
+                status=status,
+                address=address,
+                phone=phone
+            )
+            session.add(order)
+            await session.flush()
+
+            # Добавляем элементы заказа
+            order_items = [
+                OrderItem(
+                    order_id=order.id,
+                    product_id=item["product_id"],
+                    quantity=item["quantity"],
+                    price=item["price"]
+                )
+                for item in items
+            ]
+            session.add_all(order_items)
+
+            logger.info(f"Заказ {order.id} успешно создан с {len(items)} позициями")
+            return order
+
+    except exc.SQLAlchemyError as e:
+        logger.exception(f"Ошибка создания заказа: {str(e)}")
+        raise RuntimeError("Ошибка создания заказа") from e
+
+
+async def orm_get_user_orders(
+        session: AsyncSession,
+        user_id: int,
+        limit: int = 100,
+        offset: int = 0
+) -> Sequence[Order]:
+    """
+    Получает список заказов пользователя с пагинацией
+
+    Параметры:
+        session: Асинхронная сессия БД
+        user_id: ID пользователя
+        limit: Максимальное количество записей
+        offset: Смещение выборки
+
+    Возвращает:
+        List[Order]: Список заказов с предзагруженными элементами
+    """
+    logger.debug(f"Получение заказов пользователя {user_id} [limit={limit}, offset={offset}]")
 
     try:
-        # Создаем заказ
-        order = Order(
-            user_id=user_id,
-            total_price=total_price,
-            status=status,
-            address=address,
-            phone=phone
+        result = await session.execute(
+            select(Order)
+            .where(Order.user_id == user_id)
+            .options(selectinload(Order.items))
+            .order_by(Order.created.desc())
+            .limit(limit)
+            .offset(offset)
         )
-        session.add(order)
-        await session.flush()  # Получаем ID заказа
-        logger.info(f"Заказ {order.id} создан")
+        return result.unique().scalars().all()
 
-        # Добавляем элементы заказа
-        for item in items:
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=item["product_id"],
-                quantity=item["quantity"],
-                price=item["price"]
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Ошибка получения заказов: {str(e)}")
+        raise RuntimeError("Ошибка получения заказов") from e
+
+
+async def orm_get_order_details(session: AsyncSession, order_id: int) -> Optional[Order]:
+    """
+    Получает полную информацию о заказе
+
+    Параметры:
+        session: Асинхронная сессия БД
+        order_id: ID заказа
+
+    Возвращает:
+        Optional[Order]: Объект заказа или None если не найден
+    """
+    logger.debug(f"Получение деталей заказа {order_id}")
+
+    try:
+        result = await session.execute(
+            select(Order)
+            .where(Order.id == order_id)
+            .options(
+                selectinload(Order.items).joinedload(OrderItem.product)
             )
-            session.add(order_item)
-
-        await session.commit()
-        logger.info(f"Заказ {order.id} успешно добавлен в базу")
-        return order
-
-    except Exception as e:
-        await session.rollback()
-        logger.exception(f"Ошибка при создании заказа: {str(e)}")
-        raise RuntimeError(f"Ошибка при создании заказа: {str(e)}")
-
-
-async def orm_create_order(session: AsyncSession, data: dict):
-    logger.info(f"Создание заказа для пользователя {data['user_id']}")
-    order = Order(
-        user_id=data["user_id"],
-        total_price=data["total_price"]
-    )
-    session.add(order)
-    await session.flush()
-    logger.info(f"Заказ {order.id} создан")
-    return order
-
-
-async def orm_add_order_items(session: AsyncSession, order_id: int, items: list):
-    logger.info(f"Добавление товаров в заказ {order_id}")
-    for item in items:
-        order_item = OrderItem(
-            order_id=order_id,
-            product_id=item["product_id"],
-            quantity=item["quantity"],
-            price=item["price"]
         )
-        session.add(order_item)
-    await session.commit()
-    logger.info(f"Товары успешно добавлены в заказ {order_id}")
+        return result.scalar_one_or_none()
+
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Ошибка получения заказа {order_id}: {str(e)}")
+        raise RuntimeError("Ошибка получения деталей заказа") from e
 
 
-# Получение заказов пользователя
-async def orm_get_user_orders(session: AsyncSession, user_id: int):
-    logger.info(f"Запрос списка заказов пользователя {user_id}")
-    query = (
-        select(Order)
-        .where(Order.user_id == user_id)
-        .options(joinedload(Order.items))
-        .order_by(Order.created.desc())
-    )
-    result = await session.execute(query)
-    orders = result.unique().scalars().all()
-    logger.info(f"Найдено {len(orders)} заказов для пользователя {user_id}")
-    return orders
-
-
-# Получение деталей конкретного заказа
-async def orm_get_order_details(session: AsyncSession, order_id: int):
-    logger.info(f"Запрос деталей заказа {order_id}")
-    query = (
-        select(Order)
-        .where(Order.id == order_id)
-        .options(joinedload(Order.items).joinedload(OrderItem.product))
-    )
-    result = await session.execute(query)
-    order = result.unique().scalar()
-    if order:
-        logger.info(f"Заказ {order_id} найден")
-    else:
-        logger.warning(f"Заказ {order_id} не найден")
-    return order
-
-
-# Обновление статуса заказа
-async def orm_update_order_status(session: AsyncSession, order_id: int, new_status: str):
-    logger.info(f"Обновление статуса заказа {order_id} на {new_status}")
-    query = (
-        update(Order)
-        .where(Order.id == order_id)
-        .values(status=new_status)
-    )
-    await session.execute(query)
-    await session.commit()
-    logger.info(f"Статус заказа {order_id} обновлен на {new_status}")
-
-
-async def get_order_by_id(session: AsyncSession, order_id: int) -> Optional[Order]:
+async def orm_update_order_status(
+        session: AsyncSession,
+        order_id: int,
+        new_status: str
+) -> bool:
     """
-    Получение объекта заказа по его идентификатору.
+    Обновляет статус заказа
 
-    Args:
-        session (AsyncSession): Асинхронная сессия для работы с базой данных.
-        order_id (int): Идентификатор заказа.
+    Параметры:
+        session: Асинхронная сессия БД
+        order_id: ID заказа
+        new_status: Новый статус
 
-    Returns:
-        Order или None: Объект заказа, если найден, иначе None.
+    Возвращает:
+        bool: True если обновление успешно, False если заказ не найден
     """
-    query = select(Order).where(Order.id == order_id)
-    result = await session.execute(query)
-    order = result.scalar_one_or_none()
-    return order
+    logger.info(f"Обновление статуса заказа {order_id} -> {new_status}")
+
+    try:
+        result = await session.execute(
+            update(Order)
+            .where(Order.id == order_id)
+            .values(status=new_status)
+            .returning(Order.id)
+        )
+        updated = result.scalar_one_or_none()
+
+        if updated:
+            await session.commit()
+            return True
+        return False
+
+    except exc.SQLAlchemyError as e:
+        await session.rollback()
+        logger.error(f"Ошибка обновления статуса: {str(e)}")
+        raise RuntimeError("Ошибка обновления статуса заказа") from e
 
 
-# Удаление заказа
-async def orm_delete_order(session: AsyncSession, order_id: int):
-    logger.info(f"Удаление заказа {order_id}")
-    query = delete(Order).where(Order.id == order_id)
-    await session.execute(query)
-    await session.commit()
-    logger.info(f"Заказ {order_id} успешно удален")
+async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
+    """
+    Удаляет заказ и связанные элементы
+
+    Параметры:
+        session: Асинхронная сессия БД
+        order_id: ID заказа
+
+    Возвращает:
+        bool: True если удаление успешно, False если заказ не найден
+    """
+    logger.warning(f"Попытка удаления заказа {order_id}")
+
+    try:
+        async with session.begin():
+            # Удаление связанных элементов заказа
+            await session.execute(
+                delete(OrderItem)
+                .where(OrderItem.order_id == order_id)
+            )
+
+            # Удаление основного заказа
+            result = await session.execute(
+                delete(Order)
+                .where(Order.id == order_id)
+                .returning(Order.id)
+            )
+            return bool(result.scalar_one_or_none())
+
+    except exc.SQLAlchemyError as e:
+        logger.error(f"Ошибка удаления заказа: {str(e)}")
+        raise RuntimeError("Ошибка удаления заказа") from e

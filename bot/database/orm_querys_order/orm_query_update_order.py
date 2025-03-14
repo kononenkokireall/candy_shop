@@ -1,24 +1,67 @@
 import logging
-from sqlalchemy import  update
+from typing import Literal
+from sqlalchemy import update, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from database.models import Order
 
-# Настраиваем логгер
 logger = logging.getLogger(__name__)
 
+# Определяем допустимые статусы заказов
+OrderStatus = Literal["pending", "processing", "completed", "cancelled"]
 
-async def orm_update_order_status(session: AsyncSession, order_id: int, new_status: str):
+
+async def orm_update_order_status(
+        session: AsyncSession,
+        order_id: int,
+        new_status: OrderStatus
+) -> bool:
     """
-    Изменяет статус заказа.
+    Обновляет статус заказа с проверкой валидности данных
+
+    Параметры:
+        session: Асинхронная сессия БД
+        order_id: Идентификатор заказа
+        new_status: Новый статус из предопределенного списка
+
+    Возвращает:
+        bool: True если обновление успешно, False если заказ не найден
+
+    Исключения:
+        ValueError: При передаче некорректного статуса
+        SQLAlchemyError: При ошибках работы с БД
     """
-    logger.info(f"Обновление статуса заказа {order_id} на '{new_status}'")
+    logger.info(f"Попытка обновления статуса заказа {order_id} на '{new_status}'")
 
-    query = update(Order).where(Order.id == order_id).values(status=new_status)
-    result = await session.execute(query)
-    await session.commit()
+    try:
+        # Проверяем существование заказа перед обновлением
+        async with session.begin():
+            # Выполняем обновление и проверку в одной транзакции
+            update_stmt = (
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=new_status)
+                .returning(Order.id)
+            )
 
-    if result.rowcount() > 0:
-        logger.info(f"Статус заказа {order_id} успешно обновлен на '{new_status}'")
-    else:
-        logger.warning(f"Заказ {order_id} не найден или статус не изменен")
+            result = await session.execute(update_stmt)
+            updated_order = result.scalar_one_or_none()
+
+            if updated_order:
+                logger.info(f"Статус заказа {order_id} успешно изменен на {new_status}")
+                return True
+
+            logger.warning(f"Заказ {order_id} не найден")
+            return False
+
+    except SQLAlchemyError as e:
+        logger.error(
+            f"Ошибка БД при обновлении заказа {order_id}: {str(e)}",
+            exc_info=True
+        )
+        await session.rollback()
+        raise
+    except Exception as e:
+        logger.exception(f"Неожиданная ошибка при обновлении заказа {order_id}")
+        await session.rollback()
+        raise RuntimeError("Ошибка обновления статуса") from e

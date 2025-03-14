@@ -33,8 +33,12 @@ logging.basicConfig(
 
 # Загрузка переменных окружения из .env файла
 # load_dotenv(find_dotenv())
-# Создание объекта бота с использованием токена из переменных окружения и настройкой parse_mode
-bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# Создание объекта бота с использованием токена из переменных окружения и
+# настройкой parse_mode
+bot = Bot(
+    token=settings.BOT_TOKEN,
+    default=DefaultBotProperties(
+        parse_mode=ParseMode.HTML))
 # Пустой список для ID администраторов (можно заполнить при необходимости)
 bot.my_admins_list = []
 
@@ -60,11 +64,13 @@ async def on_startup(bot: Bot):
     logging.info("Запуск бота и инициализация базы данных...")
     try:
         # Если требуется удалить базу данных, раскомментируйте следующую строку
-        #await drop_db()
+        # await drop_db()
         await create_db()
         logging.info("База данных успешно создана.")
     except Exception as e:
-        logging.error(f"Ошибка при инициализации базы данных: {e}", exc_info=True)
+        logging.error(
+            f"Ошибка при инициализации базы данных: {e}",
+            exc_info=True)
 
 
 async def on_shutdown(bot: Bot):
@@ -75,7 +81,8 @@ async def on_shutdown(bot: Bot):
         bot (Bot): Объект бота.
     """
     logging.info("Завершение работы бота. Освобождение ресурсов...")
-    print('Бот завершил роботу.')  # Дополнительный вывод, можно заменить на логирование
+    # Дополнительный вывод, можно заменить на логирование
+    print('Бот завершил роботу.')
 
 
 async def main():
@@ -102,10 +109,12 @@ async def main():
     # Настройка команд бота (раскомментировать, если требуется)
 
     # Удаление существующих команд
-    # await bot.delete_my_commands(scope=types.BotCommandScopeAllPrivateChats())
+    # await
+    # bot.delete_my_commands(scope=types.BotCommandScopeAllPrivateChats())
 
     # Установка новых команд
-    # await bot.set_my_commands(commands=private, scope=types.BotCommandScopeAllPrivateChats())
+    # await bot.set_my_commands(commands=private,
+    # scope=types.BotCommandScopeAllPrivateChats())
 
     logging.info("Запуск long polling для обработки входящих обновлений...")
     try:

@@ -1,42 +1,76 @@
-import logging
-from sqlalchemy import select
+from typing import List, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from ..models import Category
+import logging
 
-from database.models import Category
-
-# Настройка логгер
 logger = logging.getLogger(__name__)
 
 
-# Получение всех категорий товаров
-async def orm_get_categories(session: AsyncSession):
+async def orm_get_categories(session: AsyncSession) -> Sequence[Category]:
     """
-    Возвращает список всех категорий в базе данных.
+    Получает все категории товаров из базы данных.
+
+    Параметры:
+        session (AsyncSession): Асинхронная сессия для работы с БД
+
+    Возвращает:
+        List[Category]: Список объектов Category
+
+    Исключения:
+        Прокидывает исключения уровня БД
     """
     logger.info("Запрос всех категорий товаров")
 
-    query = select(Category)
-    result = await session.execute(query)
-    categories = result.scalars().all()
+    try:
+        result = await session.execute(select(Category))
+        categories = result.scalars().all()
 
-    logger.info(f"Найдено {len(categories)} категорий")
-    return categories
+        logger.debug(f"Найдено {len(categories)} категорий")
+        return categories
+
+    except Exception as e:
+        logger.error(f"Ошибка получения категорий: {str(e)}")
+        await session.rollback()
+        raise
 
 
-# Создание новых категорий
-async def orm_create_categories(session: AsyncSession, categories: list):
+async def orm_create_categories(session: AsyncSession, categories: List[str]) -> int:
     """
-    Добавляет новые категории. Если в таблице уже есть записи, ничего не происходит.
+    Создает новые уникальные категории в базе данных.
     """
-    logger.info("Попытка добавления новых категорий")
+    if not categories:
+        logger.warning("Попытка добавления пустого списка категорий")
+        return 0
 
-    query = select(Category)
-    result = await session.execute(query)
+    logger.info(f"Начало обработки {len(categories)} категорий")
 
-    if result.first():  # Проверяем, существуют ли категории
-        logger.warning("Категории уже существуют. Добавление отменено.")
-        return
+    try:
+        # Проверка существующих категорий
+        existing = await session.execute(
+            select(Category.name).where(Category.name.in_(categories))
+        )
+        existing_names = {name for name in existing.scalars()}
 
-    session.add_all([Category(name=name) for name in categories])
-    await session.commit()
-    logger.info(f"Добавлены {len(categories)} новых категорий: {categories}")
+        # Фильтрация новых категорий
+        new_categories = [
+            Category(name=name)
+            for name in categories
+            if name not in existing_names
+        ]
+
+        if not new_categories:
+            logger.info("Все категории уже существуют в базе")
+            return 0
+
+        # Пакетное добавление
+        session.add_all(new_categories)
+        await session.commit()
+
+        logger.info(f"Успешно добавлено {len(new_categories)} новых категорий")
+        return len(new_categories)
+
+    except Exception as e:
+        logger.critical(f"Критическая ошибка при добавлении категорий: {str(e)}")
+        await session.rollback()
+        raise

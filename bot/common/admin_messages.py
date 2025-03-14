@@ -21,7 +21,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def format_order_notification(order: Order) -> Tuple[str, InlineKeyboardMarkup]:
+def format_order_notification(
+        order: Order) -> Tuple[str, InlineKeyboardMarkup]:
     """Форматирование уведомления о заказе с автоматическим экранированием и добавлением клавиатуры"""
     try:
         if not order:
@@ -70,4 +71,5 @@ def format_order_notification(order: Order) -> Tuple[str, InlineKeyboardMarkup]:
 
     except Exception as e:
         logger.error(f"Ошибка форматирования уведомления: {e}", exc_info=True)
-        return "Ошибка форматирования уведомления", build_admin_keyboard(order.id)
+        return "Ошибка форматирования уведомления", build_admin_keyboard(
+            order.id)

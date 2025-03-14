@@ -30,10 +30,6 @@ async def checkout(
         user_id: int,
         notification_service: NotificationService
 ) -> Tuple[InputMediaPhoto, InlineKeyboardMarkup]:
-    """
-    Оформление заказа и переход в чат с администратором
-    """
-    # Инициализация значения по умолчанию
     user_content = (
         InputMediaPhoto(media="default_banner.jpg", caption="Ошибка оформления заказа!"),
         InlineKeyboardMarkup(inline_keyboard=[])
@@ -43,13 +39,13 @@ async def checkout(
         logger.info(f"Начало оформления заказа для пользователя {user_id}")
 
         async with session.begin():
-            # Получаем данные
+            # Явная загрузка данных
             banner = await orm_get_banner(session, 'order')
             carts_user = await orm_get_user_carts(session, user_id)
 
             if not carts_user:
                 logger.warning(f"Корзина пользователя {user_id} пуста")
-                return user_content  # Возвращаем заглушку
+                return user_content
 
             # Создание заказа
             total_price = sum(item.quantity * item.product.price for item in carts_user)
@@ -69,23 +65,30 @@ async def checkout(
 
             await orm_delete_from_cart(session, user_id)
 
-            # Уведомления
-            admin_text, admin_keyboard = await format_admin_notification(order.id)
-            await notification_service.send_to_admin(
-                text=admin_text,
-                reply_markup=admin_keyboard,
-                parse_mode="HTML"
-            )
+        # Отправка уведомлений после коммита транзакции
+        admin_text, admin_keyboard = await format_admin_notification(order.id)
+        await notification_service.send_to_admin(
+            text=admin_text,
+            reply_markup=admin_keyboard,
+            parse_mode="HTML"
+        )
 
-            # Формирование ответа
-            user_content = format_user_response(banner, total_price, order_items)
+        # Получаем актуальные данные для ответа
+        async with session.begin():
+            await session.refresh(banner)
+            refreshed_carts = await orm_get_user_carts(session, user_id)
+
+        # Формирование ответа с актуальными данными
+        user_content = format_user_response(banner, total_price, order_items)
 
         logger.info(f"Заказ для пользователя {user_id} успешно оформлен")
         return user_content
 
     except Exception as e:
         logger.error(f"Ошибка оформления заказа: {e}", exc_info=True)
+        await session.rollback()
         return user_content
+
 
 
 async def format_admin_notification(order_id: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -121,6 +124,5 @@ async def format_admin_notification(order_id: int) -> tuple[str, InlineKeyboardM
     except Exception as e:
         logging.error(f"Ошибка при форматировании уведомления для заказа #{order_id}: {e}", exc_info=True)
         raise
-
 
 ##############################Handler текста с деталями заказа для пользователя########################################

@@ -1,112 +1,149 @@
 import logging
-from typing import Optional
+from typing import Optional, Sequence
 
-from sqlalchemy import select, delete
+from sqlalchemy import insert, select, delete, func
+from sqlalchemy.dialects.postgresql import insert  # <-- Важное изменение
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from database.models import Cart
+from database.models import Cart, User, Product
 
-# Настройка логгер
 logger = logging.getLogger(__name__)
 
-######################## Работа с корзинами #######################################
-
-async def orm_add_to_cart(session: AsyncSession, user_id: int, product_id: int):
-    """
-    Добавляет товар в корзину пользователя. Если товар уже есть в корзине,
-    увеличивает его количество.
-    """
-    logger.info(f"Добавление товара {product_id} в корзину пользователя {user_id}")
-
-    query = (select(Cart)
-             .where(Cart.user_id == user_id, Cart.product_id == product_id)
-             .options(joinedload(Cart.product)))
-    cart = await session.execute(query)
-    cart = cart.scalar()
-
-    if cart:  # Если товар уже в корзине, увеличиваем количество
-        cart.quantity += 1
-        await session.commit()
-        logger.info(f"Количество товара {product_id} в корзине пользователя {user_id} увеличено до {cart.quantity}")
-        return cart
-    else:  # Иначе добавляем товар в корзину
-        new_cart_item = Cart(user_id=user_id, product_id=product_id, quantity=1)
-        session.add(new_cart_item)
-        await session.commit()
-        logger.info(f"Товар {product_id} добавлен в корзину пользователя {user_id}")
-        return new_cart_item
 
 
-async def orm_get_user_carts(session: AsyncSession, user_id: int):
-    """
-    Возвращает список всех товаров в корзине пользователя.
-    """
-    logger.info(f"Запрос корзины пользователя {user_id}")
+async def orm_add_to_cart(
+        session: AsyncSession,
+        user_id: int,
+        product_id: int
+) -> Optional[Cart]:
+    logger.info(f"Adding product {product_id} to cart for user {user_id}")
 
-    query = (select(Cart)
-             .filter(Cart.user_id == user_id)
-             .options(joinedload(Cart.product)))
-    result = await session.execute(query)
-    carts = result.scalars().all()
+    try:
+        async with session.begin():
+            # Проверка существования пользователя
+            user = await session.get(User, user_id)
+            if not user:
+                logger.error(f"User {user_id} not found")
+                return None
 
-    logger.info(f"Найдено {len(carts)} товаров в корзине пользователя {user_id}")
-    return carts
+            # Проверка существования товара
+            product = await session.get(Product, product_id)
+            if not product:
+                logger.error(f"Product {product_id} not found")
+                return None
+
+            # Используем правильную конструкцию для UPSERT
+            stmt = (
+                insert(Cart)
+                .values(
+                    user_id=user_id,
+                    product_id=product_id,
+                    quantity=1  # <-- Добавляем начальное значение
+                )
+                .on_conflict_do_update(
+                    constraint='uix_user_product',
+                    set_={
+                        "quantity": Cart.quantity + 1,
+                        "updated": func.now()  # <-- Обновляем метку времени
+                    }
+                )
+                .returning(Cart)
+            )
+
+            result = await session.execute(stmt)
+            cart_item = result.scalar_one()
+
+            logger.info(f"Cart updated. New quantity: {cart_item.quantity}")
+            return cart_item
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        await session.rollback()
+        return None
+    except Exception as e:
+        logger.exception(f"Unexpected error: {str(e)}")
+        await session.rollback()
+        return None
+
+async def orm_get_user_carts(
+        session: AsyncSession,
+        user_id: int
+) -> Sequence[Cart]:
+    try:
+        result = await session.execute(
+            select(Cart)
+            .options(joinedload(Cart.product))
+            .where(Cart.user_id == user_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalars().unique().all()
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        return []
 
 
-async def orm_delete_from_cart(session: AsyncSession, user_id: int, product_id: Optional[int] = None):
-    """
-    Удаляет товар из корзины по ID пользователя и ID товара.
-    """
-    logger.info(f"Удаление товара {product_id} из корзины пользователя {user_id}")
+async def orm_delete_from_cart(
+        session: AsyncSession,
+        user_id: int,
+        product_id: Optional[int] = None
+) -> bool:
+    try:
+        query = delete(Cart).where(Cart.user_id == user_id)
+        if product_id:
+            query = query.where(Cart.product_id == product_id)
+            msg = f"product {product_id}"
+        else:
+            msg = "all products"
 
-    # Проверяем, есть ли товар в корзине
-    query_check = select(Cart).where(Cart.user_id == user_id)
-    if product_id is not None:
-        query_check = query_check.where(Cart.product_id == product_id)
+        result = await session.execute(query)
 
-    existing_items = await session.execute(query_check)
-    existing_items = existing_items.scalars().all()
+        if result.rowcount > 0:
+            logger.info(f"Deleted {msg} from user {user_id}'s cart")
+            return True
 
-    if not existing_items:
-        logger.warning(f"Товар {product_id} не найден в корзине пользователя {user_id}")
-        return
-
-    # Если товар найден, удаляем
-    query_delete = delete(Cart).where(Cart.user_id == user_id)
-    if product_id is not None:
-        query_delete = query_delete.where(Cart.product_id == product_id)
-
-    await session.execute(query_delete)
-    await session.commit()
-
-    if product_id:
-        logger.info(f"Товар {product_id} удален из корзины пользователя {user_id}")
-    else:
-        logger.info(f"Все товары удалены из корзины пользователя {user_id}")
-
-
-async def orm_reduce_product_in_cart(session: AsyncSession, user_id: int, product_id: int):
-    """
-    Уменьшает количество товара в корзине. Если количество становится 0, удаляет товар.
-    """
-    logger.info(f"Уменьшение количества товара {product_id} в корзине пользователя {user_id}")
-
-    query = (select(Cart)
-             .where(Cart.user_id == user_id, Cart.product_id == product_id))
-    cart = await session.execute(query)
-    cart = cart.scalar()
-
-    if not cart:
-        logger.warning(f"Товар {product_id} отсутствует в корзине пользователя {user_id}")
-        return
-
-    if cart.quantity > 1:  # Уменьшаем количество
-        cart.quantity -= 1
-        await session.commit()
-        logger.info(f"Количество товара {product_id} уменьшено до {cart.quantity} в корзине пользователя {user_id}")
-        return True
-    else:  # Если количество 1, удаляем товар
-        await orm_delete_from_cart(session, user_id, product_id)
-        logger.info(f"Товар {product_id} полностью удален из корзины пользователя {user_id}")
+        logger.warning(f"No items deleted for user {user_id}")
         return False
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        await session.rollback()
+        return False
+
+
+async def orm_reduce_product_in_cart(
+        session: AsyncSession,
+        user_id: int,
+        product_id: int
+) -> Optional[bool]:
+    logger.info(f"Reducing product {product_id} for user {user_id}")
+
+    try:
+        async with session.begin():
+            cart_item = await session.scalar(
+                select(Cart)
+                .where(
+                    Cart.user_id == user_id,
+                    Cart.product_id == product_id
+                )
+                .with_for_update()
+            )
+
+            if not cart_item:
+                logger.warning(f"No cart item found")
+                return None
+
+            if cart_item.quantity > 1:
+                cart_item.quantity -= 1
+                logger.info(f"New quantity: {cart_item.quantity}")
+                return True
+            else:
+                await session.delete(cart_item)
+                logger.info("Item removed from cart")
+                return False
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        await session.rollback()
+        return None
