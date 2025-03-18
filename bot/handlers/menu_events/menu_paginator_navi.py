@@ -2,8 +2,8 @@
 from utilit.paginator import Paginator
 
 
-def pages(paginator: Paginator):
-    btn = dict()
+def pages(paginator: Paginator) -> dict[str, str]:
+    btn = {}
     # Если доступна предыдущая страница, добавляем кнопку "Пред."
     if paginator.has_previous():
         btn["◀️Пред."] = "prev"

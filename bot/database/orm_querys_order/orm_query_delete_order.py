@@ -9,11 +9,8 @@ from database.models import OrderItem, Order
 logger = logging.getLogger(__name__)
 
 
-######################## Удаление заказа #######################################
-async def orm_delete_order(
-        session: AsyncSession,
-        order_id: int
-) -> bool:
+######################## Удаление заказа #####################################
+async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
     """
     Безопасно удаляет заказ и все связанные данные
 
@@ -33,15 +30,12 @@ async def orm_delete_order(
         async with session.begin():  # Использование транзакции
             # Удаление связанных элементов заказа
             await session.execute(
-                delete(OrderItem)
-                .where(OrderItem.order_id == order_id)
+                delete(OrderItem).where(OrderItem.order_id == order_id)
             )
 
             # Удаление основного заказа
             deleted_id = await session.scalar(
-                delete(Order)
-                .where(Order.id == order_id)
-                .returning(Order.id)
+                delete(Order).where(Order.id == order_id).returning(Order.id)
             )
 
             if deleted_id:

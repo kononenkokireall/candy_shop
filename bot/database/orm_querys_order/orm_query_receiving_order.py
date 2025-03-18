@@ -9,10 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 async def orm_get_user_orders(
-        session: AsyncSession,
-        user_id: int,
-        limit: int = 100,
-        offset: int = 0
+        session: AsyncSession, user_id: int, limit: int = 100, offset: int = 0
 ) -> Sequence[Order]:
     """
     Получает список заказов пользователя с пагинацией
@@ -31,7 +28,10 @@ async def orm_get_user_orders(
         ValueError: При некорректном user_id
         SQLAlchemyError: При ошибках выполнения запроса
     """
-    logger.info(f"Запрос заказов пользователя {user_id} [limit={limit}, offset={offset}]")
+    logger.info(
+        f"Запрос заказов пользователя {user_id} [limit={limit},"
+        f" offset={offset}]"
+    )
 
     try:
         # Валидация входных параметров
@@ -46,7 +46,8 @@ async def orm_get_user_orders(
             select(Order)
             .where(Order.user_id == user_id)
             .options(
-                selectinload(Order.items)  # Более эффективная загрузка для коллекций
+                # Более эффективная загрузка для коллекций
+                selectinload(Order.items)
             )
             .order_by(Order.created.desc())
             .limit(limit)
@@ -59,7 +60,8 @@ async def orm_get_user_orders(
 
         # Логирование результатов
         if orders:
-            logger.debug(f"Найдено {len(orders)} заказов для пользователя {user_id}")
+            logger.debug(f"Найдено {len(orders)} заказов для пользователя"
+                         f" {user_id}")
         else:
             logger.info(f"Заказы для пользователя {user_id} не найдены")
 

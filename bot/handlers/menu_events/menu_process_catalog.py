@@ -26,13 +26,15 @@ async def products(session, level, category, page):
     # Получаем список товаров из категории
     products_user = await orm_get_products(session, category_id=category)
     paginator = Paginator(products_user, page=page)
-    product_user = paginator.get_page()[0]  # Берем первый товар на текущей странице
+    # Берем первый товар на текущей странице
+    product_user = paginator.get_page()[0]
     # Создаем медиа-объект для продукта
     image = InputMediaPhoto(
         media=product_user.image,
-        caption=f"<strong>{product_user.name}</strong>\n{product_user.description}\n"
-                f"Стоимость: {round(product_user.price, 2)} PLN.\n"
-                f"<strong>Товар {paginator.page} из {paginator.pages}</strong>",
+        caption=f"<strong>{product_user.name}"
+                f"</strong>\n{product_user.description}\n"
+        f"Стоимость: {round(product_user.price, 2)} PLN.\n"
+        f"<strong>Товар {paginator.page} из {paginator.pages}</strong>",
     )
     # Создаем кнопки навигации для пагинации
     pagination_btn = pages(paginator)

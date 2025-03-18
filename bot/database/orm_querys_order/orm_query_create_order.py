@@ -3,12 +3,14 @@ from typing import Optional, List, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import exc
 from database.models import Order
-from database.orm_querys_order.orm_query_add_order_items import orm_add_order_items
+from database.orm_querys_order.orm_query_add_order_items import \
+    orm_add_order_items
 
 logger = logging.getLogger(__name__)
 
 
-######################## Работа с заказами #######################################
+######################## Работа с заказами ###################################
+
 
 async def orm_create_order(
         session: AsyncSession,
@@ -16,7 +18,7 @@ async def orm_create_order(
         total_price: float,
         address: Optional[str] = None,
         phone: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
 ) -> Order:
     """
     Создает новый заказ в базе данных
@@ -51,7 +53,7 @@ async def orm_create_order(
             total_price=round(total_price, 2),
             status=status,
             address=address.strip() if address else None,
-            phone=phone.strip() if phone else None
+            phone=phone.strip() if phone else None,
         )
 
         session.add(order)
@@ -76,7 +78,7 @@ async def orm_add_order(
         items: List[Dict],
         address: Optional[str] = None,
         phone: Optional[str] = None,
-        status: str = "pending"
+        status: str = "pending",
 ) -> Order:
     """
     Создает заказ и добавляет товары в транзакции
@@ -107,16 +109,13 @@ async def orm_add_order(
                 total_price=total_price,
                 address=address,
                 phone=phone,
-                status=status
+                status=status,
             )
 
             # Добавление товаров
             logger.debug(f"Добавление {len(items)} товаров в заказ {order.id}")
-            await orm_add_order_items(
-                session=session,
-                order_id=order.id,
-                items=items
-            )
+            await orm_add_order_items(session=session, order_id=order.id,
+                                      items=items)
 
             # Валидация общей суммы
             if abs(order.total_price - total_price) > 0.01:

@@ -7,7 +7,7 @@ from aiogram.utils.formatting import (
     as_list,
     as_marked_section,
     TextLink,
-    Underline
+    Underline,
 )
 
 from database.models import Order
@@ -21,9 +21,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def format_order_notification(
-        order: Order) -> Tuple[str, InlineKeyboardMarkup]:
-    """Форматирование уведомления о заказе с автоматическим экранированием и добавлением клавиатуры"""
+def format_order_notification(order: Order) -> Tuple[
+    str, InlineKeyboardMarkup]:
+    """
+    Форматирование уведомления о заказе с автоматическим экранированием
+     и добавлением клавиатуры
+    """
     try:
         if not order:
             return "⚠️ Заказ не найден", build_admin_keyboard(0)
@@ -50,9 +53,12 @@ def format_order_notification(
             as_marked_section(
                 Bold("📦 Состав заказа:"),
                 *[
-                    f"{item.product.name} x{item.quantity} - {item.price:.2f} PLN"
-                    if item.product
-                    else f"Удалённый товар (ID: {item.product_id})"
+                    (
+                        f"{item.product.name} x{item.quantity}"
+                        f" - {item.price:.2f} PLN"
+                        if item.product
+                        else f"Удалённый товар (ID: {item.product_id})"
+                    )
                     for item in order.items
                 ],
                 marker="  ▪️ ",
@@ -63,13 +69,14 @@ def format_order_notification(
                 Bold(order.status),
                 marker="▫️ ",
             ),
-            sep="\n"
+            sep="\n",
         ).as_html()
 
         keyboard = build_admin_keyboard(order.id)
         return message_text, keyboard
 
     except Exception as e:
-        logger.error(f"Ошибка форматирования уведомления: {e}", exc_info=True)
-        return "Ошибка форматирования уведомления", build_admin_keyboard(
-            order.id)
+        logger.error(f"Ошибка форматирования уведомления: {e}",
+                     exc_info=True)
+        return ("Ошибка форматирования уведомления",
+                build_admin_keyboard(order.id))

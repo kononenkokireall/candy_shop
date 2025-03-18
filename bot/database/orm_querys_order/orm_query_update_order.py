@@ -1,6 +1,6 @@
 import logging
 from typing import Literal
-from sqlalchemy import update, select
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Order
@@ -12,9 +12,7 @@ OrderStatus = Literal["pending", "processing", "completed", "cancelled"]
 
 
 async def orm_update_order_status(
-        session: AsyncSession,
-        order_id: int,
-        new_status: OrderStatus
+        session: AsyncSession, order_id: int, new_status: OrderStatus
 ) -> bool:
     """
     Обновляет статус заказа с проверкой валидности данных
@@ -31,7 +29,8 @@ async def orm_update_order_status(
         ValueError: При передаче некорректного статуса
         SQLAlchemyError: При ошибках работы с БД
     """
-    logger.info(f"Попытка обновления статуса заказа {order_id} на '{new_status}'")
+    logger.info(f"Попытка обновления статуса заказа {order_id}"
+                f" на '{new_status}'")
 
     try:
         # Проверяем существование заказа перед обновлением
@@ -48,7 +47,8 @@ async def orm_update_order_status(
             updated_order = result.scalar_one_or_none()
 
             if updated_order:
-                logger.info(f"Статус заказа {order_id} успешно изменен на {new_status}")
+                logger.info(f"Статус заказа {order_id}"
+                            f" успешно изменен на {new_status}")
                 return True
 
             logger.warning(f"Заказ {order_id} не найден")
@@ -62,6 +62,7 @@ async def orm_update_order_status(
         await session.rollback()
         raise
     except Exception as e:
-        logger.exception(f"Неожиданная ошибка при обновлении заказа {order_id}")
+        logger.exception(f"Неожиданная ошибка при обновлении заказа"
+                         f" {order_id}")
         await session.rollback()
         raise RuntimeError("Ошибка обновления статуса") from e

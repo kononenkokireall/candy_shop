@@ -1,8 +1,11 @@
 from aiogram.types import InputMediaPhoto
+
 # Импортируем запросы ORM для работы с базой данных
 from database.orm_querys.orm_query_banner import orm_get_banner
+
 # Импортируем модули для создания клавиатуры
 from keyboards.inline_main import get_user_main_btn
+
 
 # Функция создания главного меню
 async def main_menu(session, level, menu_name):

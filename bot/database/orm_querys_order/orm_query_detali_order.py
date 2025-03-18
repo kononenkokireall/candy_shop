@@ -10,8 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def orm_get_order_details(
-        session: AsyncSession,
-        order_id: int
+        session: AsyncSession, order_id: int
 ) -> Optional[Order]:
     """
     Получает полную информацию о заказе с детализацией товаров
@@ -37,8 +36,9 @@ async def orm_get_order_details(
             select(Order)
             .where(Order.id == order_id)
             .options(
-                selectinload(Order.items)
-                .joinedload(OrderItem.product)  # Для загрузки продукта
+                selectinload(Order.items).joinedload(
+                    OrderItem.product
+                )  # Для загрузки продукта
             )
             .execution_options(populate_existing=True)
         )
@@ -48,7 +48,8 @@ async def orm_get_order_details(
 
         if order:
             logger.debug(
-                f"Успешно получен заказ {order_id} с {len(order.items)} позициями"
+                f"Успешно получен заказ {order_id}"
+                f" с {len(order.items)} позициями"
             )
         else:
             logger.warning(f"Заказ {order_id} не найден в базе данных")

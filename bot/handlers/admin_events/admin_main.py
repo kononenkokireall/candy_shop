@@ -536,4 +536,3 @@ async def cancel_order_handler(
         await session.rollback()
         await callback.answer("🚨 Ошибка отмены заказа", show_alert=True)
 
-

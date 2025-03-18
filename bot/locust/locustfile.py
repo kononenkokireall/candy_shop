@@ -48,14 +48,16 @@ class BotUser(HttpUser):
                 "from": {
                     "id": self.user_id,
                     "first_name": f"User{self.user_id}",
-                    "last_name": f"Test{random.randint(1, 100)}"
+                    "last_name": f"Test{random.randint(1, 100)}",
                 },
                 "chat": {"id": self.user_id},
                 "text": "/start",
-                "date": int(time.time())
-            }
+                "date": int(time.time()),
+            },
         }
-        with self.client.post("/webhook", json=payload, catch_response=True) as response:
+        with self.client.post(
+            "/webhook", json=payload, catch_response=True
+        ) as response:
             if response.status_code != 200:
                 response.failure(f"Login failed: {response.text}")
 
@@ -72,7 +74,7 @@ class BotUser(HttpUser):
         payload = {
             "callback_query": {
                 "data": f"browse:{category['id']}:{page}",
-                "message": {"chat": {"id": self.user_id}}
+                "message": {"chat": {"id": self.user_id}},
             }
         }
         self.client.post("/webhook", json=payload, name="/browse_products")
@@ -84,7 +86,7 @@ class BotUser(HttpUser):
         payload = {
             "callback_query": {
                 "data": f"view_product:{product['id']}",
-                "message": {"chat": {"id": self.user_id}}
+                "message": {"chat": {"id": self.user_id}},
             }
         }
         self.client.post("/webhook", json=payload, name="/view_product")
@@ -99,10 +101,12 @@ class BotUser(HttpUser):
         payload = {
             "callback_query": {
                 "data": f"add_to_cart:{product['id']}",
-                "message": {"chat": {"id": self.user_id}}
+                "message": {"chat": {"id": self.user_id}},
             }
         }
-        with self.client.post("/webhook", json=payload, name="/add_to_cart") as response:
+        with self.client.post(
+            "/webhook", json=payload, name="/add_to_cart"
+        ) as response:
             if response.status_code == 200:
                 response.success()
             else:
@@ -119,7 +123,7 @@ class BotUser(HttpUser):
         payload = {
             "callback_query": {
                 "data": "preview_order",
-                "message": {"chat": {"id": self.user_id}}
+                "message": {"chat": {"id": self.user_id}},
             }
         }
         self.client.post("/webhook", json=payload, name="/preview_order")
@@ -128,7 +132,7 @@ class BotUser(HttpUser):
         payload = {
             "callback_query": {
                 "data": "confirm_payment",
-                "message": {"chat": {"id": self.user_id}}
+                "message": {"chat": {"id": self.user_id}},
             }
         }
         self.client.post("/webhook", json=payload, name="/confirm_payment")
@@ -144,7 +148,7 @@ class BotUser(HttpUser):
             "message": {
                 "chat": {"id": self.user_id},
                 "text": "/invalid_command",
-                "date": int(time.time())
+                "date": int(time.time()),
             }
         }
         self.client.post("/webhook", json=payload, name="/invalid_command")
@@ -153,7 +157,7 @@ class BotUser(HttpUser):
         payload = {
             "callback_query": {
                 "data": "view_product:999999",
-                "message": {"chat": {"id": self.user_id}}
+                "message": {"chat": {"id": self.user_id}},
             }
         }
         self.client.post("/webhook", json=payload, name="/invalid_product")

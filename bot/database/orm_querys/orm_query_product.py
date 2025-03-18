@@ -1,73 +1,83 @@
 import logging
+from decimal import Decimal
+from typing import Optional, Dict, Any, Sequence
 
+# Импорт функций для создания, выборки, обновления и удаления данных из БД
+from sqlalchemy import select, update, delete, exc
+
+# Импорт асинхронной сессии для работы с базой данных
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# Опции для пред загрузки связанных объектов
 from sqlalchemy.orm import selectinload
 
-from utilit.seshe import async_cache
-
-# Настройка логгер
-logger = logging.getLogger(__name__)
-
-from typing import Optional, Dict, Any, Sequence
-from decimal import Decimal
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, exc
+# Импорт моделей, используемых в запросах
 from database.models import Product, Category
 
+# Настройка логгера для модуля
+logger = logging.getLogger(__name__)
 
 
-
-async def orm_add_product(session: AsyncSession, data: Dict[str, Any]) -> Product:
+async def orm_add_product(
+        session: AsyncSession,
+        data: Dict[str, Any]
+) -> Product:
     """
     Создает новый товар в базе данных с полной валидацией данных.
 
     Параметры:
-        session: Асинхронная сессия БД
-        data: Словарь с данными товара. Должен содержать:
-            - name (str): Название товара
-            - description (str): Описание
-            - price (число): Цена
-            - image (str): URL изображения
-            - category (int): ID категории
+      - session: Асинхронная сессия БД.
+      - data: Словарь с данными товара. Должен содержать следующие ключи:
+          • name (str): Название товара.
+          • description (str): Описание товара.
+          • price (число): Цена товара.
+          • image (str): URL изображения товара.
+          • category (int): ID категории, к которой принадлежит товар.
 
     Возвращает:
-        Product: Созданный объект товара
+      - Product: Созданный объект товара.
 
     Исключения:
-        ValueError: При некорректных данных
-        RuntimeError: При ошибках БД
+      - ValueError: Если отсутствуют обязательные поля или данные некорректны.
+      - RuntimeError: Если возникает ошибка
+       при выполнении запросов к базе данных.
     """
     logger.info("Попытка добавления нового товара")
 
     try:
-        # Валидация обязательных полей
-        required_fields = {'name', 'description', 'price', 'image', 'category'}
+        # Валидация: проверяем наличие всех обязательных полей
+        required_fields = {"name", "description", "price", "image", "category"}
         if missing := required_fields - data.keys():
             raise ValueError(f"Отсутствуют обязательные поля: {missing}")
 
-        # Проверка существования категории
+        # Проверяем, существует ли категория с указанным ID
         category_exists = await session.execute(
-            select(Category.id).where(Category.id == int(data['category'])))
+            select(Category.id).where(Category.id == int(data["category"]))
+        )
         if not category_exists.scalar():
             raise ValueError(f"Категория {data['category']} не существует")
 
-        # Преобразование типов с обработкой ошибок
+        # Преобразуем цену и ID категории в корректные типы
         try:
-            price = Decimal(str(data['price'])).quantize(Decimal('0.01'))
-            category_id = int(data['category'])
+            price = Decimal(str(data["price"])).quantize(Decimal("0.01"))
+            category_id = int(data["category"])
         except (ValueError, TypeError) as e:
             raise ValueError("Некорректные данные цены или категории") from e
 
-        # Создание объекта
+        # Создаем объект товара с очищенными значениями
         product = Product(
-            name=data['name'].strip(),
-            description=data['description'].strip(),
+            name=data["name"].strip(),
+            description=data["description"].strip(),
             price=price,
-            image=data['image'].strip(),
-            category_id=category_id
+            image=data["image"].strip(),
+            category_id=category_id,
         )
 
+        # Открываем транзакцию для добавления товара
         async with session.begin():
             session.add(product)
+            # Выполняем flush, чтобы получить
+            # сгенерированный ID товара до коммит
             await session.flush()
             logger.info(f"Товар {product.id} создан: {product.name}")
             return product
@@ -83,7 +93,6 @@ async def orm_add_product(session: AsyncSession, data: Dict[str, Any]) -> Produc
         raise RuntimeError("Внутренняя ошибка сервера") from e
 
 
-@async_cache(ttl=300)
 async def orm_get_products(
         session: AsyncSession,
         category_id: int,
@@ -91,19 +100,21 @@ async def orm_get_products(
         offset: int = 0
 ) -> Sequence[Product]:
     """
-    Получает список товаров категории с пагинацией и кэшированием.
+    Получает список товаров определенной категории с поддержкой пагинации.
 
     Параметры:
-        session: Асинхронная сессия БД
-        category_id: ID категории
-        limit: Максимальное количество товаров
-        offset: Смещение выборки
+      - session: Асинхронная сессия БД.
+      - category_id: ID категории, для которой запрашиваются товары.
+      - limit: Максимальное количество товаров для выборки.
+      - offset: Смещение выборки (для реализации пагинации).
 
     Возвращает:
-        Sequence[Product]: Последовательность объектов Product
+      - Sequence[Product]: Список объектов Product,
+       соответствующих заданной категории.
 
     Исключения:
-        RuntimeError: При ошибках БД
+      - RuntimeError: Если возникает ошибка
+       при выполнении запроса к базе данных.
     """
     logger.debug(f"Запрос товаров категории {category_id} [limit={limit}]")
 
@@ -111,7 +122,9 @@ async def orm_get_products(
         result = await session.execute(
             select(Product)
             .where(Product.category_id == category_id)
-            .options(selectinload(Product.category))
+            .options(
+                selectinload(Product.category)
+            )  # Пред загрузка информации о категории
             .order_by(Product.name)
             .limit(limit)
             .offset(offset)
@@ -128,17 +141,17 @@ async def orm_get_product(
         product_id: int
 ) -> Optional[Product]:
     """
-    Получает полную информацию о товаре по ID.
+    Получает полную информацию о товаре по его ID.
 
     Параметры:
-        session: Асинхронная сессия БД
-        product_id: Идентификатор товара
+      - session: Асинхронная сессия БД.
+      - product_id: Идентификатор товара.
 
     Возвращает:
-        Optional[Product]: Объект товара или None
+      - Optional[Product]: Объект товара, если найден, иначе None.
 
     Исключения:
-        RuntimeError: При ошибках БД
+      - RuntimeError: Если возникает ошибка при выполнении запроса.
     """
     logger.debug(f"Запрос товара {product_id}")
 
@@ -146,7 +159,9 @@ async def orm_get_product(
         result = await session.execute(
             select(Product)
             .where(Product.id == product_id)
-            .options(selectinload(Product.category))
+            .options(
+                selectinload(Product.category)
+            )  # Пред загрузка данных о категории товара
         )
         return result.scalar_one_or_none()
 
@@ -161,42 +176,55 @@ async def orm_update_product(
         data: Dict[str, Any]
 ) -> bool:
     """
-    Обновляет данные товара. Возвращает True если обновление успешно.
+    Обновляет данные товара по его ID с использованием переданных данных.
 
     Параметры:
-        session: Асинхронная сессия БД
-        product_id: ID товара
-        data: Словарь с новыми данными
+      - session: Асинхронная сессия БД.
+      - product_id: ID товара, который необходимо обновить.
+      - data: Словарь с новыми данными. Возможные ключи:
+            • name
+            • description
+            • price
+            • image
+            • category
 
     Возвращает:
-        bool: Результат операции
+      - bool: True, если обновление прошло успешно, иначе False.
 
     Исключения:
-        ValueError: При некорректных данных
-        RuntimeError: При ошибках БД
+      - ValueError: Если переданы некорректные данные.
+      - RuntimeError: При ошибках работы с БД.
     """
     logger.info(f"Обновление товара {product_id}")
 
     try:
-        updates = {}
-        # Подготовка данных для обновления
-        if 'name' in data:
-            updates['name'] = str(data['name']).strip()
-        if 'description' in data:
-            updates['description'] = str(data['description']).strip()
-        if 'price' in data:
+        updates: Dict[str, Any] = {}
+        # Если поле 'name' присутствует,
+        # очищаем строку и добавляем в обновления
+        if "name" in data:
+            updates["name"] = str(data["name"]).strip()
+        # Если поле 'description' присутствует, очищаем и добавляем
+        if "description" in data:
+            updates["description"] = str(data["description"]).strip()
+        # Если поле 'price' присутствует, пытаемся преобразовать его в Decimal
+        if "price" in data:
             try:
-                updates['price'] = Decimal(str(data['price'])).quantize(Decimal('0.01'))
+                updates["price"] = (Decimal(str(data["price"]))
+                                    .quantize(Decimal("0.01")))
             except (ValueError, TypeError) as e:
                 raise ValueError("Некорректное значение цены") from e
-        if 'image' in data:
-            updates['image'] = str(data['image']).strip()
-        if 'category' in data:
+        # Если поле 'image' присутствует, очищаем строку
+        if "image" in data:
+            updates["image"] = str(data["image"]).strip()
+        # Если поле 'category' присутствует, преобразуем его в целое число
+        if "category" in data:
             try:
-                updates['category_id'] = int(data['category'])
+                updates["category_id"] = int(data["category"])
             except (ValueError, TypeError) as e:
                 raise ValueError("Некорректный ID категории") from e
 
+        # Если нет никаких обновлений, логируем предупреждение
+        # и возвращаем False
         if not updates:
             logger.warning("Пустой запрос на обновление")
             return False
@@ -208,6 +236,7 @@ async def orm_update_product(
                 .values(**updates)
                 .returning(Product.id)
             )
+            # Если возвращается ID обновленного товара, операция успешна
             return bool(result.scalar_one_or_none())
 
     except exc.SQLAlchemyError as e:
@@ -215,27 +244,29 @@ async def orm_update_product(
         raise RuntimeError("Ошибка обновления данных") from e
 
 
-async def orm_delete_product(session: AsyncSession, product_id: int) -> bool:
+async def orm_delete_product(
+        session: AsyncSession,
+        product_id: int
+) -> bool:
     """
-    Удаляет товар по ID. Возвращает True если удаление успешно.
+    Удаляет товар по его ID.
 
     Параметры:
-        session: Асинхронная сессия БД
-        product_id: ID товара
+      - session: Асинхронная сессия БД.
+      - product_id: ID товара для удаления.
 
     Возвращает:
-        bool: Результат операции
+      - bool: True, если удаление прошло успешно, иначе False.
 
     Исключения:
-        RuntimeError: При ошибках БД
+      - RuntimeError: Если возникает ошибка при удалении товара.
     """
     logger.warning(f"Попытка удаления товара {product_id}")
 
     try:
         async with session.begin():
             result = await session.execute(
-                delete(Product)
-                .where(Product.id == product_id)
+                delete(Product).where(Product.id == product_id)
                 .returning(Product.id)
             )
             return bool(result.scalar_one_or_none())

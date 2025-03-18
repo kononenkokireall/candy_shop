@@ -12,14 +12,14 @@ from utilit.notification import NotificationService
 
 # Функция для обработки запросов меню на основе уровня и действия
 async def get_menu_content(
-        session: AsyncSession,
-        level: int,
-        menu_name: str,
-        notification_service: NotificationService | None = None,
-        product_id: int | None = None,
-        category: int | None = None,
-        page: int | None = None,
-        user_id: int | None = None,
+    session: AsyncSession,
+    level: int,
+    menu_name: str,
+    notification_service: NotificationService | None = None,
+    product_id: int | None = None,
+    category: int | None = None,
+    page: int | None = None,
+    user_id: int | None = None,
 ):
     # Проверяем уровень меню и вызываем соответствующую функцию
     if level == 0:  # Главная страница
