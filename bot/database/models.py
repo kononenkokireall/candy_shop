@@ -123,9 +123,8 @@ class User(Base):
     # Фамилия пользователя, может отсутствовать.
     last_name: Mapped[str] = mapped_column(String(150), nullable=False)
     # Телефон пользователя.
-    phone: Mapped[str] = mapped_column(String(13))
-    # Адрес пользователя.
-    address: Mapped[str] = mapped_column(String(200))
+    phone: Mapped[str] = mapped_column(String(13), nullable=False,
+                                       server_default="Не указан")
 
     # Связь с заказами, сделанными пользователем.
     # Cascade 'all, delete-orphan' означает,
@@ -193,10 +192,6 @@ class Order(Base):
                                                nullable=False)
     # Статус заказа (например, pending, completed и т.д.).
     status: Mapped[str] = mapped_column(String(20), default="pending")
-    # Адрес доставки заказа.
-    address: Mapped[str] = mapped_column(String(200))
-    # Контактный телефон для заказа.
-    phone: Mapped[str] = mapped_column(String(13))
 
     # Определение связи с пользователем.
     user: Mapped["User"] = relationship(back_populates="orders")

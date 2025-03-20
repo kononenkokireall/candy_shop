@@ -11,9 +11,6 @@ from database.models import Banner
 logger = logging.getLogger(__name__)
 
 
-############### Работа с баннерами (информационными страницами) ###############
-
-
 async def orm_add_banner_description(
         session: AsyncSession,
         data: Dict[str, str]
@@ -49,8 +46,6 @@ async def orm_add_banner_description(
         ]
         # Добавляем созданные объекты в сессию.
         session.add_all(banners)
-        # Фиксируем изменения в базе данных.
-        await session.commit()
         logger.info("Баннеры успешно добавлены")
     except Exception as e:
         # Логируем исключение,
@@ -86,7 +81,6 @@ async def orm_change_banner_image(
             .values(image=image, admin_link=admin_link)
         )
         result = await session.execute(query)
-        await session.commit()
 
         # Проверяем количество затронутых строк,
         # чтобы убедиться, что запись была обновлена.
@@ -105,7 +99,7 @@ async def orm_change_banner_image(
 
 async def orm_get_banner(
         session: AsyncSession,
-        page: str)\
+        page: str) \
         -> Optional[Banner]:
     """
     Функция возвращает баннер для указанной страницы.
