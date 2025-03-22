@@ -53,7 +53,7 @@ def get_user_product_btn(
         ),
         InlineKeyboardButton(
             text="Корзина 🛒",
-            callback_data=MenuCallBack(level=3, menu_name="cart").pack(),
+            callback_data=MenuCallBack(level=3, menu_name="cart", product_id=42).pack(),
         ),
         InlineKeyboardButton(
             text="Купить 💵",

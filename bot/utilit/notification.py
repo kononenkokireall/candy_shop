@@ -1,4 +1,5 @@
-from typing import Any
+import logging
+from typing import Any, Optional
 
 from aiogram import Bot
 
@@ -12,7 +13,10 @@ class NotificationService:
         admin_chat_id: ID чата администратора для получения уведомлений
     """
 
-    def __init__(self, bot: Bot, admin_chat_id: int) -> None:
+    def __init__(self,
+                 admin_chat_id: int,
+                 bot: Optional[Bot] = None,
+                 ) -> None:
         """
         Инициализация сервиса уведомлений.
 
@@ -24,17 +28,31 @@ class NotificationService:
         self.bot = bot
         self.admin_chat_id = admin_chat_id
 
-    async def send_to_admin(self, text: str, **kwargs: Any) -> None:
+    async def send_to_admin(self, text: str, **kwargs: Any) -> bool:
         """
-        Асинхронная отправка сообщения администратору.
+        Отправляет сообщение администратору, если бот доступен.
 
-        Args:
-            text: Текст сообщения для отправки
-            **kwargs: Дополнительные аргументы для bot.send_message():
-                      parse_mode, disable_web_page_preview и т.д.
+        Returns:
+            bool: Успешность отправки (True/False)
 
-        Examples:
-            await service.send_to_admin("Новый заказ!", parse_mode="HTML")
+        Raises:
+            ValueError: Если бот не инициализирован
         """
-        await self.bot.send_message(chat_id=self.admin_chat_id,
-                                    text=text, **kwargs)
+        if not self.bot:
+            logging.warning("Bot не доступен для отправки уведомления!")
+            return False
+
+        try:
+            await self.bot.send_message(
+                chat_id=self.admin_chat_id,
+                text=text,
+                **kwargs
+            )
+            return True
+        except Exception as e:
+            logging.error(f"Ошибка отправки уведомления: {str(e)}")
+            return False
+
+    def set_bot(self, bot: Bot) -> None:
+        """Динамическая установка бота"""
+        self.bot = bot

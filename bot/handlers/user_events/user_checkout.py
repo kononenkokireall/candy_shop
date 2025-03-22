@@ -90,7 +90,6 @@ async def checkout(
             ]
             # Добавляем все элементы заказа в сессию
             session.add_all(order_items)
-
             # Удаляем товары из корзины после создания заказа
             await orm_delete_from_cart(session, user_id)
 
@@ -104,12 +103,16 @@ async def checkout(
         # Обновляем данные баннера и
         # получаем актуальное состояние корзины (если требуется)
         async with session.begin():
-            await session.refresh(banner)
+            if banner:
+                await session.refresh(banner)
             refreshed_carts = await orm_get_user_carts(session, user_id)
 
         # Формируем финальное сообщение
         # для пользователя с использованием данных заказа
-        user_content = format_user_response(banner, total_price, order_items)
+        if banner:
+            user_content = format_user_response(banner, total_price, order_items)
+        else:
+           logger.error("Ошибка: banner is None")
 
         logger.info(f"Заказ для пользователя {user_id} успешно оформлен")
         return user_content
@@ -122,7 +125,7 @@ async def checkout(
 
 
 async def format_admin_notification(
-        order_id: int) -> tuple[str, InlineKeyboardMarkup]:
+        order_id: int) -> Tuple[str, InlineKeyboardMarkup]:
     """
     Форматирует уведомление для администратора о новом заказе.
 
@@ -158,13 +161,17 @@ async def format_admin_notification(
 
             # Форматируем сообщение
             # с использованием функции форматирования уведомлений
-            return format_order_notification(order)
+            if order:
+                return format_order_notification(order)
+            else:
+                logger.error(f"Ошибка: заказ {order_id} не найден")
+                return ("Ошибка: заказ не найден",
+                        InlineKeyboardMarkup(inline_keyboard=[]))
 
     except Exception as e:
         # Логируем ошибку при форматировании уведомления для заказа
         logging.error(
             f"Ошибка при форматировании уведомления для заказа "
             f"{order_id}: {e}",
-            exc_info=True,
-        )
+            exc_info=True,)
         raise

@@ -35,8 +35,11 @@ def get_user_cart_btn(
             InlineKeyboardButton(
                 text="❌ Удалить",
                 callback_data=MenuCallBack(
-                    level=level, menu_name="delete", product_id=product_id,
-                    page=page
+                    level=level,
+                    menu_name="delete",
+                    product_id=product_id,
+                    page=page,
+
                 ).pack(),
             )
         )
@@ -67,30 +70,35 @@ def get_user_cart_btn(
         # Обработка кнопок для постраничной навигации.
         # Если передан словарь пагинации,
         # формируем отдельный ряд с кнопками "next" и "prev".
-        row = []
-        for text, menu_name in pagination_btn.items():
-            if menu_name == "next":
-                # Если действие 'next', номер страницы увеличивается на 1.
-                row.append(
-                    InlineKeyboardButton(
-                        text=text,
-                        callback_data=MenuCallBack(
-                            level=level, menu_name=menu_name, page=page + 1
-                        ).pack(),
+        if pagination_btn:  # Проверяем, что pagination_btn не None и не пустой
+            row = []  # Инициализируем список для кнопок пагинации
+            for text, menu_name in pagination_btn.items():
+                if menu_name == "next":
+                    row.append(
+                        InlineKeyboardButton(
+                            text=text,
+                            callback_data=MenuCallBack(
+                                level=level,
+                                menu_name=menu_name,
+                                page=page + 1
+                            ).pack()
+                        )
                     )
-                )
-            elif menu_name == "prev":
-                # Если действие 'prev', номер страницы уменьшается на 1.
-                row.append(
-                    InlineKeyboardButton(
-                        text=text,
-                        callback_data=MenuCallBack(
-                            level=level, menu_name=menu_name, page=page - 1
-                        ).pack(),
+                elif menu_name == "prev":
+                    row.append(
+                        InlineKeyboardButton(
+                            text=text,
+                            callback_data=MenuCallBack(
+                                level=level,
+                                menu_name=menu_name,
+                                page=page - 1
+                            ).pack()
+                        )
                     )
-                )
-        # Добавляем сформированный ряд с кнопками пагинации в клавиатуру.
-        keyboard.row(*row)
+
+            # Добавляем ряд только если есть кнопки
+            if row:
+                keyboard.row(*row)
 
         # Формируем дополнительный ряд с действиями:
         # 1. Кнопка "🏠Меню" для возврата в главное меню
@@ -109,8 +117,10 @@ def get_user_cart_btn(
                 .pack(),
             ),
         ]
+        keyboard.row(*row_2)
+        return keyboard.as_markup()
+
         # Добавляем этот дополнительный ряд и возвращаем итоговую клавиатуру.
-        return keyboard.row(*row_2).as_markup()
     else:
         # Если параметр page не задан,
         # значит корзина не использует постраничную навигацию.
@@ -123,4 +133,6 @@ def get_user_cart_btn(
         )
         # Возвращаем клавиатуру
         # с настройкой расположения кнопок согласно sizes.
-        return keyboard.adjust(*sizes).as_markup()  # type: ignore
+        keyboard.adjust(*sizes)
+
+        return keyboard.as_markup()

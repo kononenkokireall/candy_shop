@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, cast
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,6 +13,7 @@ from typing_extensions import Optional
 # CallbackData и добавляет префикс "menu" к callback-данным.
 class MenuCallBack(CallbackData, prefix="menu"):
     level: int  # Уровень вложенности меню.
+    user_id: Optional[int] = None
     # Определяет, на каком уровне пользователь находится.
     menu_name: str  # Название текущего меню,
     # Используется для определения контекста.
@@ -28,7 +29,7 @@ class MenuCallBack(CallbackData, prefix="menu"):
     # Валидатор для поля level, чтобы гарантировать,
     # что уровень не является отрицательным.
     @validator("level")
-    def validate_level(self, v):
+    def validate_level(self, v: int) -> int:
         if v < 0:
             raise ValueError("Level cannot be negative")
         return v
@@ -49,7 +50,9 @@ class OrderCallbackData(CallbackData, prefix="order"):
 def get_user_main_btn(
         *,
         level: int,
-        sizes: tuple[int, ...] = (2,)) -> InlineKeyboardMarkup:
+        sizes: tuple[int, ...] = (2,),
+        user_id: int,
+        product_id: Optional[int] = None) -> InlineKeyboardMarkup:
     """
     Создает inline-клавиатуру с основными кнопками главного меню.
 
@@ -66,56 +69,40 @@ def get_user_main_btn(
     keyboard = InlineKeyboardBuilder()
 
     # Определяем словарь с текстами кнопок и соответствующими именами меню.
-    btn = {
-        "Товары 🍭 💨": "catalog",
-        "Корзина 🛒": "cart",
-        "О нас 💬": "about",
-        "Оплата 💳": "payment",
-        "Доставка 📦": "shipping",
+    buttons = {
+        "Товары 🍭 💨": ("catalog", level + 1),
+        "Корзина 🛒": ("cart", 3),
+        "О нас 💬": ("about", level),
+        "Оплата 💳": ("payment", level),
+        "Доставка 📦": ("shipping", level),
     }
 
-    # Перебираем словарь и создаем для каждой кнопки
-    # InlineKeyboardButton с callback-данными.
-    for text, menu_name in btn.items():
-        if menu_name == "catalog":
-            # Если кнопка "Каталог", увеличиваем уровень на 1.
-            keyboard.add(
-                InlineKeyboardButton(
-                    text=text,
-                    callback_data=MenuCallBack(
-                        level=level + 1, menu_name=menu_name
-                    ).pack(),
-                )
+    for text, (menu_name, btn_level) in buttons.items():
+        keyboard.add(
+            InlineKeyboardButton(
+                text=text,
+                callback_data=MenuCallBack(
+                    level=btn_level,
+                    menu_name=menu_name,
+                    page=0,
+                    user_id=user_id,
+                    # Передаем user_id динамически
+                    product_id=product_id#
+                ).pack()
             )
-        elif (
-                menu_name == "cart"
-        ):  # Если кнопка "Корзина", используем фиксированный уровень 3.
-            keyboard.add(
-                InlineKeyboardButton(
-                    text=text,
-                    callback_data=MenuCallBack(level=3,
-                                               menu_name=menu_name).pack(),
-                )
-            )
-        else:  # Для остальных кнопок используем текущий уровень меню.
-            keyboard.add(
-                InlineKeyboardButton(
-                    text=text,
-                    callback_data=MenuCallBack(level=level,
-                                               menu_name=menu_name).pack(),
-                )
-            )
+        )
 
-    # Распределяем кнопки по рядам согласно заданным размерам
-    # и возвращаем итоговую разметку.
-    return keyboard.adjust(*sizes).as_markup() # type : ignore
+    return InlineKeyboardMarkup(
+        inline_keyboard=keyboard.adjust(*sizes).export()
+    )
 
 
 # Универсальная функция для создания inline-клавиатуры из словаря.
 def get_callback_btn(
-        *,
-        btn: Dict[str, str],
-        sizes: tuple[int, ...] = (2,)) -> InlineKeyboardMarkup:
+    *,
+    btn: Dict[str, str],
+    sizes: tuple[int, ...] = (2,)
+) -> InlineKeyboardMarkup:
     """
     Создает inline-клавиатуру на основе словаря,
      где ключ — это текст кнопки, а значение — callback-данные.
@@ -137,4 +124,5 @@ def get_callback_btn(
 
     # Распределяем кнопки по рядам согласно заданным размерам
     # и возвращаем итоговую разметку.
-    return keyboard.adjust(*sizes).as_markup()  # type : ignore
+    return cast(InlineKeyboardMarkup, keyboard.adjust(*sizes).as_markup())
+

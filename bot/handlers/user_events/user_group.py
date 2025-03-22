@@ -15,7 +15,7 @@ user_group_router.edited_message.filter(
 
 # Handler для команды "/admin"
 @user_group_router.message(Command("admin"))
-async def get_admins(message: types.Message, bot: Bot):
+async def get_admins(message: types.Message, bot: Bot) -> None:
     """
     Когда пользователь в чате вводит команду "/admin",
     бот получает список администраторов чата и сохраняет их ID.
@@ -34,14 +34,15 @@ async def get_admins(message: types.Message, bot: Bot):
     bot.my_admins_list = admins_list  # Сохраняем список идентификаторов администраторов в атрибуте `bot`
 
     # Если сообщение отправлено администратором, удаляем его
-    if message.from_user.id in admins_list:
+    # Явная проверка на None
+    if message.from_user is not None and message.from_user.id in bot.my_admins_list:
         await message.delete()
 
     # print(admins_list)  # (Можно раскомментировать для отладки: вывести список идентификаторов администраторов)
 
 
 # Функция для очистки текста от пунктуации
-def clean_text(text: str):
+def clean_text(text: str) -> str:
     """
     Удаляет все символы пунктуации из переданного текста.
     """
@@ -51,18 +52,25 @@ def clean_text(text: str):
 # Handler для обработки как новых, так и отредактированных сообщений в группах/супергруппах
 @user_group_router.edited_message()
 @user_group_router.message()
-async def cleaner(message: types.Message):
+async def cleaner(message: types.Message) -> None:
     """
     Фильтрует сообщения, содержащие запрещенные слова.
     Отправляет предупреждение пользователю и удаляет сообщение.
     """
-    # Проверяем, пересекаются ли запрещенные слова с текстом сообщения
-    if restricted_words.intersection(clean_text(message.text.lower()).split()):
-        # Если найдены запрещенные слова, отправляем предупреждение
-        await message.answer(
-            f"{message.from_user.first_name}, соблюдайте порядок в чате!"
+    if message.text is None:
+        return
+    text = message.text.lower()
+    cleaned_text = clean_text(text).split()
+
+    if restricted_words.intersection(cleaned_text):
+        # Безопасное получение имени пользователя
+        user_name = (
+            message.from_user.full_name
+            if message.from_user is not None
+            else "Пользователь"
         )
-        # Удаляем сообщение с запрещенными словами
+
+        await message.answer(f"{user_name}, соблюдайте порядок в чате!")
         await message.delete()
 
         # ВАЖНО: Код ниже можно раскомментировать, чтобы автоматически банить пользователей за использование запрещенных слов

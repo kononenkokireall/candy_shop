@@ -52,26 +52,26 @@ ADMIN_KB = get_keyboard(
 )
 
 
-###############################Точка входа в события администратора####################################################
-
 # Handler команды /admin для входа в функционал администратора
 @admin_router.message(Command("admin"))
-async def admin_features(message: types.Message):
+async def admin_question(message: types.Message) -> None:
     await message.answer("Что хотите сделать?", reply_markup=ADMIN_KB)
 
-
-#####################################Команды для администратора########################################################
 
 # Handler команды (отмена) и сброса состояния
 @admin_router.message(StateFilter("*"), Command("отмена"))
 @admin_router.message(StateFilter("*"), F.text.casefold() == "отмена")
 async def cancel_handler(message: types.Message, state: FSMContext) -> None:
-    current_state = await state.get_state()  # Получаем текущее состояние машины состояний
-    if current_state is None:  # Если состояния нет, завершаем выполнение
+    current_state = await state.get_state()
+    # Получаем текущее состояние машины состояний
+    if current_state is None:
+        # Если состояния нет, завершаем выполнение
         return
-    if OrderProcess.product_for_change:  # Сбрасываем объект изменения, если он существует
+    if OrderProcess.product_for_change:
+        # Сбрасываем объект изменения, если он существует
         OrderProcess.product_for_change = None
-    await state.clear()  # Сбрасываем все состояния FSM
+    await state.clear()
+    # Сбрасываем все состояния FSM
     # Возвращаем пользователя в главное меню
     await message.answer("Действия отменены", reply_markup=ADMIN_KB)
 
@@ -83,17 +83,22 @@ async def back_step_handler(message: types.Message, state: FSMContext) -> None:
     # Получаем текущее состояние FSM
     current_state = await state.get_state()
 
-    # Проверяем, если пользователь уже на самом первом шаге
+    # Проверка наличия состояния
+    if current_state is None:
+        await message.answer("❌ Нет активного состояния")
+        return
+
     if current_state == OrderProcess.NAME:
-        await message.answer(
-            'Предыдущего шага нет, или введите название товара или напишите "отмена"'
-        )
+        await message.answer('⚠️ Вы уже на первом шаге')
         return
 
     previous = None
     # Перебираем все состояния FSM, чтобы установить предыдущее состояние
     for step in OrderProcess.__all_states__:
         if step.state == current_state:
+            if previous is None:
+                await message.answer("🚨 Невозможно вернуться назад")
+                return
             # Устанавливаем предыдущее состояние
             await state.set_state(previous)
             await message.answer(
@@ -105,11 +110,9 @@ async def back_step_handler(message: types.Message, state: FSMContext) -> None:
         previous = step
 
 
-###################################FSM_states для администратора#######################################################
-
 # Становимся в состояние ожидания ввода name
 @admin_router.message(StateFilter(None), F.text == "Добавить товар")
-async def add_product(message: types.Message, state: FSMContext):
+async def add_product(message: types.Message, state: FSMContext) -> None:
     await message.answer(
         "Введите название товара",
         reply_markup=types.ReplyKeyboardRemove()
@@ -119,7 +122,8 @@ async def add_product(message: types.Message, state: FSMContext):
 
 # Handler для отображения ассортимента (категорий товаров)
 @admin_router.message(F.text == 'Ассортимент')
-async def admin_features(message: types.Message, session: AsyncSession):
+async def admin_features(message: types.Message,
+                         session: AsyncSession) -> None:
     # Получаем категории из базы данных
     categories = await orm_get_categories(session)
     # Генерируем кнопки с категориями
@@ -130,7 +134,8 @@ async def admin_features(message: types.Message, session: AsyncSession):
 
 # Handler для отправки перечня информационных страниц и входа в состояние загрузки изображения
 @admin_router.message(StateFilter(None), F.text == 'Добавить/Изменить баннер')
-async def add_image2(message: types.Message, state: FSMContext, session: AsyncSession):
+async def add_and_change_image(message: types.Message, state: FSMContext,
+                     session: AsyncSession) -> None:
     # Получаем список страниц
     pages_names = [page.name for page in await orm_get_info_pages(session)]
     await message.answer(f"Отправьте фото баннера.\n"
@@ -140,33 +145,44 @@ async def add_image2(message: types.Message, state: FSMContext, session: AsyncSe
     await state.set_state(AddBanner.IMAGE)
 
 
-##############################Handler Изменение названия товара для администратора#####################################
-
 # Handler для изменения названия товара (вход в состояние name)
 @admin_router.callback_query(StateFilter(None), F.data.startswith("change_"))
 async def change_product_callback(
         callback: types.CallbackQuery,
         state: FSMContext,
         session: AsyncSession
-):
-    product_id = callback.data.split("_")[-1]
+) -> None:
+    # Проверка данных callback
+    if not callback.data:
+        await callback.answer("❌ Ошибка данных")
+        return
 
-    product_for_change = await orm_get_product(session, int(product_id))
-    # Получаем товар для изменения
-    OrderProcess.product_for_change = product_for_change
-    # Просим администратора ввести название товара
-    await callback.answer()
-    await callback.message.answer(
-        "Введите название товара",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
+    # Безопасное разделение данных
+    parts = callback.data.split("_")
+    product_id = parts[-1] if len(parts) > 1 else None
+
+    if not product_id or not product_id.isdigit():
+        await callback.answer("⚠️ Неверный формат ID")
+        return
+
+    product = await orm_get_product(session, int(product_id))
+    if not product:
+        await callback.answer("🔍 Товар не найден")
+        return
+
+    OrderProcess.product_for_change = product
+    if callback.message:
+        await callback.message.answer(
+            "✏️ Введите новое название товара:",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
     await state.set_state(OrderProcess.NAME)
 
 
 # Handler для введения изменения названия товара.
 # Получаем данные для состояния name и потом меняем состояние на DESCRIPTION
 @admin_router.message(OrderProcess.NAME, F.text)
-async def add_name(message: types.Message, state: FSMContext):
+async def add_name(message: types.Message, state: FSMContext) -> None:
     # Проверяем, если пользователь хочет оставить старое название
     if message.text == "." and OrderProcess.product_for_change:
         await state.update_data(name=OrderProcess.product_for_change.name)
@@ -193,18 +209,19 @@ async def add_name(message: types.Message, state: FSMContext):
 
 # Handler для некорректного ввода на шаге NAME
 @admin_router.message(OrderProcess.NAME)
-async def add_name2(message: types.Message):
-    await message.answer("Вы ввели не допустимые данные, введите текст названия товара")
+async def add_name2(message: types.Message) -> None:
+    await message.answer(
+        "Вы ввели не допустимые данные, введите текст названия товара")
 
-
-##############################Handler Изменение описания товара для администратора#####################################
 
 # Handler для получения описания товара
 @admin_router.message(OrderProcess.DESCRIPTION, F.text)
-async def add_description(message: types.Message, state: FSMContext, session: AsyncSession):
+async def add_description(message: types.Message, state: FSMContext,
+                          session: AsyncSession) -> None:
     # Проверяем, если пользователь хочет оставить старое описание
     if message.text == "." and OrderProcess.product_for_change:
-        await state.update_data(description=OrderProcess.product_for_change.description)
+        await state.update_data(
+            description=OrderProcess.product_for_change.description)
     else:
         # Проверка минимальной длины описания
         if 4 >= len(message.text):
@@ -213,7 +230,8 @@ async def add_description(message: types.Message, state: FSMContext, session: As
                 "Введите заново"
             )
             return
-        await state.update_data(description=message.text)  # Обновляем данные FSM
+        await state.update_data(
+            description=message.text)  # Обновляем данные FSM
 
     # Генерация кнопок с категориями
     categories = await orm_get_categories(session)
@@ -227,59 +245,73 @@ async def add_description(message: types.Message, state: FSMContext, session: As
 # Handler для некорректного ввода на шаге DESCRIPTION
 @admin_router.message(OrderProcess.DESCRIPTION)
 async def add_description2(message: types.Message):
-    await message.answer("Вы ввели не допустимые данные, введите текст описания товара")
+    await message.answer(
+        "Вы ввели не допустимые данные, введите текст описания товара")
 
-
-##############################Handler выбора категории товара для администратора#######################################
 
 # Handler для отображения товаров из выбранной категории
 @admin_router.callback_query(F.data.startswith('category_'))
-async def starring_at_product(callback: types.CallbackQuery, session: AsyncSession):
-    category_id = callback.data.split('_')[-1]  # Получаем ID категории
-    # Перебираем все товары из базы данных для данной категории
-    for product in await orm_get_products(session, int(category_id)):
-        await callback.message.answer_photo(
-            product.image,
-            caption=f"<strong>{product.name}\
-                    </strong>\n{product.description}\n"
-                    f"Стоимость: {round(product.price, 2)}",
-            reply_markup=get_callback_btn(
-                btn={
-                    "Удалить": f"delete_{product.id}",
-                    "Изменить": f"change_{product.id}",
-                },
-                sizes=(2,)
-            ),
-        )
-    await callback.answer()
-    await callback.message.answer("ОК, вот список товаров ⏫")
+async def starring_at_product(callback: types.CallbackQuery,
+                              session: AsyncSession) -> None:
+    if not callback.data:
+        await callback.answer("❌ Ошибка данных")
+        return
+
+    parts = callback.data.split('_')
+    category_id = parts[-1] if len(parts) > 1 else None
+
+    if not category_id or not category_id.isdigit():
+        await callback.answer("⚠️ Неверный формат ID категории")
+        return
+
+    products = await orm_get_products(session, int(category_id))
+    if not products:
+        await callback.answer("📭 Товары в категории отсутствуют")
+        return
+
+    for product in products:
+        if callback.message and product.image:
+            await callback.message.answer_photo(
+                product.image,
+                caption=f"📦 {product.name}\n💵 Цена: {product.price}",
+                reply_markup=get_callback_btn(btn={
+                    "🗑 Удалить": f"delete_{product.id}",
+                    "✏️ Изменить": f"change_{product.id}",
+                }, sizes=(2,)))
+
+            if callback.message:
+                await callback.message.answer("✅ Список товаров обновлен")
+            await callback.answer()
 
 
 # Handler для выбора категории через Callback
 @admin_router.callback_query(OrderProcess.CATEGORY)
-async def category_choice(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+async def category_choice(callback: types.CallbackQuery, state: FSMContext,
+                          session: AsyncSession) -> None:
     if int(callback.data) in [category.id for category in
-                              await orm_get_categories(session)]:  # Проверяем валидность выбранной категории
+                              await orm_get_categories(
+                                  session)]:  # Проверяем валидность выбранной категории
         await callback.answer()  # Подтверждаем выбор
-        await state.update_data(category=callback.data)  # Сохраняем выбранную категорию в данные FSM
-        await callback.message.answer('Теперь введите цену товара.')  # Переходим к следующему шагу
+        await state.update_data(
+            category=callback.data)  # Сохраняем выбранную категорию в данные FSM
+        await callback.message.answer(
+            'Теперь введите цену товара.')  # Переходим к следующему шагу
         await state.set_state(OrderProcess.PRICE)
     else:
-        await callback.message.answer('Выберите категорию из кнопок.')  # Сообщение об ошибке
+        await callback.message.answer(
+            'Выберите категорию из кнопок.')  # Сообщение об ошибке
         await callback.answer()
 
 
 # Handler для некорректного ввода на шаге CATEGORY
 @admin_router.message(OrderProcess.CATEGORY)
-async def category_choice2(message: types.Message):
+async def category_choice2(message: types.Message) -> None:
     await message.answer("'Выберите категорию из кнопок.'")
 
 
-##############################Handler Изменение цены товара для администратора########################################
-
 # Handler для изменения цены товара
 @admin_router.message(OrderProcess.PRICE, F.text)
-async def add_price(message: types.Message, state: FSMContext):
+async def add_price(message: types.Message, state: FSMContext) -> None:
     # Проверяем, если пользователь хочет оставить старую цену
     if message.text == "." and OrderProcess.product_for_change:
         await state.update_data(price=OrderProcess.product_for_change.price)
@@ -300,16 +332,16 @@ async def add_price(message: types.Message, state: FSMContext):
 
 # Handler для некорректного ввода на шаге PRICE
 @admin_router.message(OrderProcess.PRICE)
-async def add_price2(message: types.Message):
-    await message.answer("Вы ввели не допустимые данные, введите стоимость товара")
+async def add_price2(message: types.Message) -> None:
+    await message.answer(
+        "Вы ввели не допустимые данные, введите стоимость товара")
 
-
-##########################Handler Изменение/Добавление баннера меню для администратора#################################
 
 # Добавляем/изменяем изображение в таблице (там уже есть записанные страницы по именам:
 # main, catalog, cart(для пустой корзины), about, payment, shipping
 @admin_router.message(AddBanner.IMAGE, F.photo)
-async def add_banner(message: types.Message, state: FSMContext, session: AsyncSession):
+async def add_banner(message: types.Message, state: FSMContext,
+                     session: AsyncSession) -> None:
     image_id = message.photo[-1].file_id
     for_page = message.caption.strip()
     pages_names = [page.name for page in await orm_get_info_pages(session)]
@@ -324,15 +356,14 @@ async def add_banner(message: types.Message, state: FSMContext, session: AsyncSe
 
 # Получение некорректного ввода
 @admin_router.message(AddBanner.IMAGE)
-async def add_banner2(message: types.Message):
+async def add_banner2(message: types.Message) -> None:
     await message.answer("Отправьте фото баннера или отмена")
 
 
-##############################Handler Изменение фото товара для администратора#########################################
-
 # Handler для добавления/изменения изображения товара
 @admin_router.message(OrderProcess.ADD_IMAGES, or_f(F.photo, F.casefold()))
-async def add_image(message: types.Message, state: FSMContext, session: AsyncSession):
+async def add_image(message: types.Message, state: FSMContext,
+                    session: AsyncSession) -> None:
     # Проверяем, если пользователь хочет оставить старое изображение
     if message.text and message.text == "." and OrderProcess.product_for_change:
         await state.update_data(image=OrderProcess.product_for_change.image)
@@ -348,7 +379,8 @@ async def add_image(message: types.Message, state: FSMContext, session: AsyncSes
         # Проверяем, если происходит изменение существующего товара
         if OrderProcess.product_for_change:
             # Обновляем товар
-            await orm_update_product(session, OrderProcess.product_for_change.id, data)
+            await orm_update_product(session,
+                                     OrderProcess.product_for_change.id, data)
         else:
             # Добавляем товар
             await orm_add_product(session, data)
@@ -376,21 +408,40 @@ async def add_image2(message: types.Message):
     await message.answer("Отправьте фото пищи")
 
 
-##############################Handler удаления товара для администратора##############################################
-
 # Handler для удаления товара
 @admin_router.callback_query(F.data.startswith("delete_"))
-async def delete_product_callback(callback: types.CallbackQuery, session: AsyncSession):
+async def delete_product_callback(callback: types.CallbackQuery,
+                                  session: AsyncSession) -> None:
     # Получаем ID продукта для удаления
-    product_id = callback.data.split("_")[-1]
-    # Удаляем товар из базы данных
-    await orm_delete_product(session, int(product_id))
+    """Обработчик удаления товара с проверкой данных"""
+    # Проверяем наличие callback.data
+    if not callback.data:
+        await callback.answer("❌ Ошибка: отсутствуют данные", show_alert=True)
+        return
 
-    await callback.answer("Товар удален")
-    await callback.message.answer("Товар удален!")
+    # Безопасное разделение данных
+    parts = callback.data.split("_")
+    if len(parts) < 2 or not parts[-1].isdigit():
+        await callback.answer("⚠️ Неверный формат запроса", show_alert=True)
+        return
 
+    product_id = int(parts[-1])
 
-##############################Handler подтверждения оплаты товара для администратора###################################
+    try:
+        # Удаление товара
+        await orm_delete_product(session, product_id)
+        await callback.answer("✅ Товар удален")
+
+        # Отправка подтверждения с проверкой сообщения
+        if callback.message and isinstance(callback.message, types.Message):
+            await callback.message.answer("🗑️ Товар успешно удален!")
+        else:
+            logger.warning("Сообщение недоступно для ответа")
+
+    except Exception as e:
+        logger.error(f"Ошибка удаления товара: {str(e)}")
+        await callback.answer("🚨 Ошибка при удалении", show_alert=True)
+
 
 @admin_router.callback_query(
     OrderAction.filter(F.action == "confirm")
@@ -422,6 +473,9 @@ async def confirm_order_handler(
                    происходит откат изменений и отправка уведомления об ошибке.
     """
     try:
+        if not callback.bot:
+            logger.error("Bot instance not available")
+            return
         # Извлечение идентификатора заказа из callback_data
         order_id = callback_data.order_id
 
@@ -443,7 +497,7 @@ async def confirm_order_handler(
             # Отправка уведомления пользователю
             try:
                 await callback.bot.send_message(
-                    chat_id=str(order.user_id), #TODO
+                    chat_id=str(order.user_id),
                     text=(
                         "🎉 <b>Ваш заказ подтвержден!</b>\n\n"
                         "✅ Оплата прошла успешно\n"
@@ -493,6 +547,12 @@ async def cancel_order_handler(
                    и отправка уведомления об ошибке пользователю.
     """
     try:
+        # Проверяем доступность бота
+        if not callback.bot:
+            logger.error("Бот недоступен")
+            await callback.answer("❌ Ошибка системы", show_alert=True)
+            return
+
         # Используем контекстный менеджер для транзакции
         async with session.begin():
             # Получаем заказ с блокировкой для предотвращения конкурентного доступа
@@ -517,7 +577,7 @@ async def cancel_order_handler(
             # Отправка уведомления пользователю
             try:
                 await callback.bot.send_message(
-                    chat_id=str(order.user_id), #TODO
+                    chat_id=str(order.user_id),
                     text=(
                         "❌ <b>Заказ отменен</b>\n\n"
                         "Администратор отменил ваш заказ. "
@@ -535,4 +595,3 @@ async def cancel_order_handler(
         logger.error(f"Ошибка отмены: {e}", exc_info=True)
         await session.rollback()
         await callback.answer("🚨 Ошибка отмены заказа", show_alert=True)
-

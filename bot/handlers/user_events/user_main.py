@@ -42,19 +42,23 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
 # Обработчик команды /start.
 @user_private_router.message(CommandStart())
-async def start_cmd(message: types.Message, session: AsyncSession):
+async def start_cmd(message: types.Message, session: AsyncSession) -> None:
     """
     Обрабатывает команду /start, получая контент главного меню из базы данных
     и отправляя его пользователю в виде фотографии с подписью и клавиатурой.
     """
+    user_id = message.from_user.id
     # Получаем медиа-контент и клавиатуру для главного меню.
-    media, reply_markup = await get_menu_content(session, level=0,
-                                                 menu_name="main")
+    media, reply_markup = await get_menu_content(session,
+                                                 level=0,
+                                                 menu_name="main",
+                                                 user_id=user_id)
 
     # Добавить проверку
     if not media or not reply_markup:
@@ -66,6 +70,8 @@ async def start_cmd(message: types.Message, session: AsyncSession):
     await message.answer_photo(
         media.media, caption=media.caption, reply_markup=reply_markup
     )
+
+
 # Обработчик команды /help.
 @user_private_router.message(Command("help"))
 async def help_cmd(message: types.Message) -> None:
@@ -104,12 +110,13 @@ async def help_cmd(message: types.Message) -> None:
 
     await message.answer(help_text)
 
+
 # Функция для добавления товара в корзину.
 async def add_to_cart(
-    callback: types.CallbackQuery,
-    callback_data: MenuCallBack,
-    session: AsyncSession,
-):
+        callback: types.CallbackQuery,
+        callback_data: MenuCallBack,
+        session: AsyncSession,
+) -> None:
     """
     Добавляет товар в корзину пользователя.
 
@@ -126,32 +133,28 @@ async def add_to_cart(
         session,
         user_id=user_local.id,
         first_name=user_local.first_name,
-        last_name=user_local.last_name,
+        last_name=user_local.last_name or "",
         phone=None,
     )
     # Добавляем выбранный товар в корзину.
-    await orm_add_to_cart(
-        session, user_id=user_local.id, product_id=callback_data.product_id
-    )
-    try:
-        # Отправляем ответное уведомление пользователю о том,
-        # что товар добавлен.
+    if callback_data.product_id is not None:
+        await orm_add_to_cart(session, user_id=user_local.id,
+                              product_id=callback_data.product_id)
         await callback.answer("Товар добавлен в корзину!")
         await session.commit()
-    except Exception as e:
-        logger.error(f"Ошибка добавления в корзину: {e}")
-        await session.rollback()
-        raise
+    else:
+        await callback.answer("Ошибка: отсутствует идентификатор товара.",
+                              show_alert=True)
 
 
 # Обработчик callback-запросов, формируемых через MenuCallBack.
 @user_private_router.callback_query(MenuCallBack.filter())
 async def user_menu(
-    callback: types.CallbackQuery,
-    callback_data: MenuCallBack,
-    session: AsyncSession,
-    notification_service: NotificationService = None,
-):
+        callback: types.CallbackQuery,
+        callback_data: MenuCallBack,
+        session: AsyncSession,
+        notification_service: NotificationService = None,
+) -> None:
     """
     Обрабатывает взаимодействие пользователя с меню.
 
@@ -183,9 +186,18 @@ async def user_menu(
             )
             # Обновляем медиа-содержимое сообщения,
             # используя полученные данные.
-            await callback.message.edit_media(media=media, reply_markup=keyboards)
+            if (
+                    callback.message
+                    and isinstance(callback.message,
+                                   types.Message)  # Проверка типа
+                    and callback.message.photo  # Проверяем наличие медиа
+            ):
+                await callback.message.edit_media(
+                    media=media,
+                    reply_markup=keyboards
+                )
             await callback.answer()
-            return  # Завершаем обработку, чтобы избежать дальнейших действий.
+            return
 
         # Если выбрано действие "add_to_cart", добавляем товар в корзину.
         if callback_data.menu_name == "add_to_cart":
@@ -194,6 +206,16 @@ async def user_menu(
 
         # Получаем контент меню из базы данных по данным,
         # переданным в callback.
+        print(f"Передача параметров в get_menu_content: "
+              f"level={callback_data.level}, menu_name={callback_data.menu_name}, "
+              f"category={callback_data.category}, page={callback_data.page}, "
+              f"user_id={callback.from_user.id}, product_id={callback_data.product_id}")
+
+        logger.debug(f"Передача параметров в get_menu_content: "
+                     f"level={callback_data.level}, menu_name={callback_data.menu_name}, "
+                     f"category={callback_data.category}, page={callback_data.page}, "
+                     f"user_id={callback.from_user.id}, product_id={callback_data.product_id}")
+
         media, reply_markup = await get_menu_content(
             session,
             level=callback_data.level,
@@ -216,11 +238,18 @@ async def user_menu(
         logger.debug(f"Media: {media}")
         logger.debug(f"Reply Markup: {reply_markup}")
 
+        # Проверяем доступность сообщения перед доступом к атрибутам
+        if not callback.message or not isinstance(callback.message,
+                                                  types.Message):
+            await callback.answer("Сообщение недоступно!", show_alert=True)
+            return
+
         # Получаем текущее медиа из сообщения
         current_media = (
-            callback.message.photo[-1].file_id if callback.message.photo else None
+            callback.message.photo[
+                -1].file_id if callback.message and callback.message.photo else None
         )
-        current_reply_markup = callback.message.reply_markup
+        current_reply_markup = callback.message.reply_markup if callback.message else None
 
         # Проверяем, изменилось ли медиа или клавиатура
         is_media_changed = (
@@ -238,8 +267,12 @@ async def user_menu(
 
         # Пытаемся обновить сообщение пользователя с новым медиа и клавиатурой.
         try:
-            await callback.message.edit_media(media=media,
-                                              reply_markup=reply_markup)
+            # Дополнительная проверка перед редактированием
+            if isinstance(callback.message, types.Message):
+                await callback.message.edit_media(
+                    media=media,
+                    reply_markup=reply_markup)
+
         except TelegramBadRequest as e:
             if "message is not modified" in str(e):
                 logger.warning("Попытка изменить сообщение без изменений.")
