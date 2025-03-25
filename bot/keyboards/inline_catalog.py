@@ -1,4 +1,4 @@
-from itertools import product
+
 from typing import List, Any
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,7 +12,7 @@ def get_user_catalog_btn(
         *,
         level: int,
         categories: List[Any],
-        sizes: tuple[int, ...] = (2,))\
+        sizes: tuple[int, ...] = (2,),)\
         -> InlineKeyboardMarkup:
 
     """
@@ -55,7 +55,11 @@ def get_user_catalog_btn(
     keyboard.add(
         InlineKeyboardButton(
             text="Корзина 🛒",
-            callback_data=MenuCallBack(level=3, menu_name="cart", product_id=42).pack(),
+            callback_data=MenuCallBack(
+                level=3,
+                menu_name="cart",
+                page=1
+            ).pack(),
         )
     )
 

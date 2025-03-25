@@ -35,32 +35,26 @@ def get_keyboard(
         request_contact=4,
         sizes=(2, 2, 1)
     """
-
     # Создаем экземпляр билдера для создания клавиатуры
     keyboard = ReplyKeyboardBuilder()
-
     # Перебираем переданные кнопки,
     # используя enumerate для получения индекса кнопки
     for index, text in enumerate(btn):
-
         # Если задан параметр request_contact и
         # его значение совпадает с индексом кнопки,
         # создаем кнопку, которая запрашивает контакт пользователя при нажатии
         if request_contact is not None and request_contact == index:
             keyboard.add(KeyboardButton(text=text, request_contact=True))
-
         # Если задан параметр request_location
         # и его значение совпадает с индексом кнопки,
         # создаем кнопку, которая запрашивает
         # местоположение пользователя при нажатии
         elif request_location is not None and request_location == index:
             keyboard.add(KeyboardButton(text=text, request_location=True))
-
         # Если ни одно из условий не выполнено,
         # добавляем обычную кнопку с текстом
         else:
             keyboard.add(KeyboardButton(text=text))
-
     # Метод adjust расставляет кнопки
     # по рядам согласно переданным размерам (sizes),
     # а as_markup возвращает итоговую клавиатуру

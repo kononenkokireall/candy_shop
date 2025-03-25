@@ -19,7 +19,7 @@ from utilit.paginator import Paginator
 async def catalog(
         session: AsyncSession,
         level: int,
-        menu_name: str
+        menu_name: str,
 ) -> Tuple[Optional[InputMediaPhoto], InlineKeyboardMarkup]:
     # Получаем баннер для каталога
 
@@ -39,7 +39,8 @@ async def catalog(
     # Генерируем клавиатуру
     keyboard = get_user_catalog_btn(
         level=level,
-        categories=categories_list  # Предполагается что принимает list[Category]
+        categories=categories_list
+        # Предполагается что принимает list[Category]
     )
 
     return media, keyboard
@@ -50,7 +51,7 @@ async def products(
         session: AsyncSession,
         level: int,
         category: int,
-        page: int
+        page: int,
 ) -> Tuple[Optional[InputMediaPhoto], InlineKeyboardMarkup]:
     # Получаем товары и преобразуем в list
     raw_products = await orm_get_products(session, category_id=category)

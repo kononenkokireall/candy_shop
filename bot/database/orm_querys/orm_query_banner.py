@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional, List, Sequence
+from typing import Dict, Optional, Sequence
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession

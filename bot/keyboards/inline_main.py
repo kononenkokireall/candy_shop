@@ -51,7 +51,6 @@ def get_user_main_btn(
         *,
         level: int,
         sizes: tuple[int, ...] = (2,),
-        user_id: int,
         product_id: Optional[int] = None) -> InlineKeyboardMarkup:
     """
     Создает inline-клавиатуру с основными кнопками главного меню.
@@ -84,10 +83,7 @@ def get_user_main_btn(
                 callback_data=MenuCallBack(
                     level=btn_level,
                     menu_name=menu_name,
-                    page=0,
-                    user_id=user_id,
-                    # Передаем user_id динамически
-                    product_id=product_id#
+                    product_id=product_id
                 ).pack()
             )
         )

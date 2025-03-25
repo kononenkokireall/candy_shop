@@ -14,7 +14,8 @@ def get_user_cart_btn(
         # Номер страницы корзины; если задан,
         # значит корзина содержит список товаров с постраничной навигацией
         page: Optional[int],
-        # Словарь кнопок пагинации (например, {"Вперед": "next", "Назад": "prev"})
+        # Словарь кнопок пагинации (например, {"Вперед": "next",
+        # "Назад": "prev"})
         pagination_btn: Optional[Dict[str, str]],
         # Идентификатор продукта,
         # для которого выполняется действие (может быть None)
@@ -38,8 +39,6 @@ def get_user_cart_btn(
                     level=level,
                     menu_name="delete",
                     product_id=product_id,
-                    page=page,
-
                 ).pack(),
             )
         )

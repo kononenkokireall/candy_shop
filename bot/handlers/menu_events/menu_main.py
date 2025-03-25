@@ -1,21 +1,19 @@
-from aiogram.types import InputMediaPhoto
+from typing import Tuple, Optional
+
+from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Импортируем запросы ORM для работы с базой данных
 from database.orm_querys.orm_query_banner import orm_get_banner
-
 # Импортируем модули для создания клавиатуры
 from keyboards.inline_main import get_user_main_btn
-
-from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup
-from typing import Tuple, Optional
 
 
 async def main_menu(
         session: AsyncSession,
         level: int,
         menu_name: str
-,       user_id: int) -> Tuple[Optional[InputMediaPhoto], InlineKeyboardMarkup]:
+) -> Tuple[Optional[InputMediaPhoto], InlineKeyboardMarkup]:
     """
     Создает контент главного меню с баннером и клавиатурой
 
@@ -29,7 +27,6 @@ async def main_menu(
         :param session:
         :param level:
         :param menu_name:
-        :param user_id:
     """
     # Получаем баннер с проверкой на None
     banner = await orm_get_banner(session, menu_name)
@@ -45,4 +42,4 @@ async def main_menu(
                                             caption=caption)
 
     # Всегда возвращаем клавиатуру
-    return media_content, get_user_main_btn(level=level, user_id=user_id)
+    return media_content, get_user_main_btn(level=level)

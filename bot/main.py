@@ -1,8 +1,7 @@
 """
-Основной модуль Telegram-бота для интернет-магазина конфет.
+Основной модуль Telegram-бота.
 Организация работы бота, роутинга и взаимодействия с базой данных.
 """
-
 import asyncio
 import logging
 from typing import Final

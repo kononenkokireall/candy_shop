@@ -9,9 +9,6 @@ from database.orm_querys_order.orm_query_add_order_items import \
 logger = logging.getLogger(__name__)
 
 
-######################## Работа с заказами ###################################
-
-
 async def orm_create_order(
         session: AsyncSession,
         user_id: int,

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter, or_f
@@ -6,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Order
+from database.models import Order, Product
 from database.orm_querys.orm_query_banner import (
     orm_get_info_pages,
     orm_change_banner_image,
@@ -32,7 +33,8 @@ from states.states import OrderProcess, AddBanner
 
 # Создаем роутер для работы с администраторами
 admin_router = Router()
-# Устанавливаем фильтр для работы только в личных сообщениях и только для администраторов
+# Устанавливаем фильтр для работы только
+# в личных сообщениях и только для администраторов
 admin_router.message.filter(ChatTypeFilter(["private"]), IsAdmin())
 
 # Настройка логирования
@@ -127,15 +129,17 @@ async def admin_features(message: types.Message,
     # Получаем категории из базы данных
     categories = await orm_get_categories(session)
     # Генерируем кнопки с категориями
-    btn = {category.name: f'category_{category.id}' for category in categories}
+    btn = {category.name: f'category_{category.id}'
+           for category in categories if category.name is not None}
     await message.answer("Выберите категорию",
                          reply_markup=get_callback_btn(btn=btn))
 
 
-# Handler для отправки перечня информационных страниц и входа в состояние загрузки изображения
+# Handler для отправки перечня информационных
+# страниц и входа в состояние загрузки изображения
 @admin_router.message(StateFilter(None), F.text == 'Добавить/Изменить баннер')
 async def add_and_change_image(message: types.Message, state: FSMContext,
-                     session: AsyncSession) -> None:
+                               session: AsyncSession) -> None:
     # Получаем список страниц
     pages_names = [page.name for page in await orm_get_info_pages(session)]
     await message.answer(f"Отправьте фото баннера.\n"
@@ -153,7 +157,7 @@ async def change_product_callback(
         session: AsyncSession
 ) -> None:
     # Проверка данных callback
-    if not callback.data:
+    if callback.data is None:
         await callback.answer("❌ Ошибка данных")
         return
 
@@ -165,12 +169,13 @@ async def change_product_callback(
         await callback.answer("⚠️ Неверный формат ID")
         return
 
-    product = await orm_get_product(session, int(product_id))
-    if not product:
+    product: Optional[Product] = await orm_get_product(session,
+                                                       int(product_id))
+    if product is None:
+        OrderProcess.product_for_change = product
         await callback.answer("🔍 Товар не найден")
         return
 
-    OrderProcess.product_for_change = product
     if callback.message:
         await callback.message.answer(
             "✏️ Введите новое название товара:",
@@ -183,16 +188,21 @@ async def change_product_callback(
 # Получаем данные для состояния name и потом меняем состояние на DESCRIPTION
 @admin_router.message(OrderProcess.NAME, F.text)
 async def add_name(message: types.Message, state: FSMContext) -> None:
+    if message.text is None:  # Добавляем проверку на None
+        await message.answer("Введите название товара")
+        return
+
     # Проверяем, если пользователь хочет оставить старое название
     if message.text == "." and OrderProcess.product_for_change:
         await state.update_data(name=OrderProcess.product_for_change.name)
         # Обновляем данные FSM
     else:
         # Здесь можно сделать какую либо дополнительную проверку
-        # и выйти из handler не меняя состояние с отправкой соответствующего сообщения
+        # и выйти из handler не меняя состояние
+        # с отправкой соответствующего сообщения
         # например:
         # Проверка длины введенного названия
-        if 4 >= len(message.text) >= 150:
+        if len(message.text) < 5 or len(message.text) > 150:
             await message.answer(
                 "Название товара не должно превышать 150 символов\n"
                 "или быть менее 5 ти символов. \n"
@@ -218,13 +228,16 @@ async def add_name2(message: types.Message) -> None:
 @admin_router.message(OrderProcess.DESCRIPTION, F.text)
 async def add_description(message: types.Message, state: FSMContext,
                           session: AsyncSession) -> None:
+    if message.text is None:
+        await message.answer("Введите описание товара")
+        return
     # Проверяем, если пользователь хочет оставить старое описание
     if message.text == "." and OrderProcess.product_for_change:
         await state.update_data(
             description=OrderProcess.product_for_change.description)
     else:
         # Проверка минимальной длины описания
-        if 4 >= len(message.text):
+        if len(message.text) < 5:
             await message.answer(
                 "Слишком короткое описание. \n"
                 "Введите заново"
@@ -244,7 +257,7 @@ async def add_description(message: types.Message, state: FSMContext,
 
 # Handler для некорректного ввода на шаге DESCRIPTION
 @admin_router.message(OrderProcess.DESCRIPTION)
-async def add_description2(message: types.Message):
+async def add_description2(message: types.Message) -> None:
     await message.answer(
         "Вы ввели не допустимые данные, введите текст описания товара")
 
@@ -253,7 +266,7 @@ async def add_description2(message: types.Message):
 @admin_router.callback_query(F.data.startswith('category_'))
 async def starring_at_product(callback: types.CallbackQuery,
                               session: AsyncSession) -> None:
-    if not callback.data:
+    if callback.data is None:
         await callback.answer("❌ Ошибка данных")
         return
 
@@ -288,18 +301,29 @@ async def starring_at_product(callback: types.CallbackQuery,
 @admin_router.callback_query(OrderProcess.CATEGORY)
 async def category_choice(callback: types.CallbackQuery, state: FSMContext,
                           session: AsyncSession) -> None:
+
+    if callback.data is None or not callback.data.isdigit():
+        # Проверка данных
+        await callback.answer("❌ Некорректные данные")
+        return
+
     if int(callback.data) in [category.id for category in
                               await orm_get_categories(
-                                  session)]:  # Проверяем валидность выбранной категории
-        await callback.answer()  # Подтверждаем выбор
+                                  session)]:
+        # Проверяем валидность выбранной категории
+        await callback.answer()
+        # Подтверждаем выбор
         await state.update_data(
-            category=callback.data)  # Сохраняем выбранную категорию в данные FSM
+            category=callback.data)
+        # Сохраняем выбранную категорию в данные FSM
         await callback.message.answer(
-            'Теперь введите цену товара.')  # Переходим к следующему шагу
+            'Теперь введите цену товара.')
+        # Переходим к следующему шагу
         await state.set_state(OrderProcess.PRICE)
     else:
         await callback.message.answer(
-            'Выберите категорию из кнопок.')  # Сообщение об ошибке
+            'Выберите категорию из кнопок.')
+        # Сообщение об ошибке
         await callback.answer()
 
 
@@ -312,6 +336,11 @@ async def category_choice2(message: types.Message) -> None:
 # Handler для изменения цены товара
 @admin_router.message(OrderProcess.PRICE, F.text)
 async def add_price(message: types.Message, state: FSMContext) -> None:
+
+    if message.text is None:  # Проверка на None
+        await message.answer("Введите цену товара")
+        return
+
     # Проверяем, если пользователь хочет оставить старую цену
     if message.text == "." and OrderProcess.product_for_change:
         await state.update_data(price=OrderProcess.product_for_change.price)
@@ -337,11 +366,20 @@ async def add_price2(message: types.Message) -> None:
         "Вы ввели не допустимые данные, введите стоимость товара")
 
 
-# Добавляем/изменяем изображение в таблице (там уже есть записанные страницы по именам:
+# Добавляем/изменяем изображение в таблице
+# (там уже есть записанные страницы по именам:
 # main, catalog, cart(для пустой корзины), about, payment, shipping
 @admin_router.message(AddBanner.IMAGE, F.photo)
 async def add_banner(message: types.Message, state: FSMContext,
                      session: AsyncSession) -> None:
+    if message.photo is None or len(message.photo) == 0:
+        await message.answer("Отправьте фото баннера")
+        return
+
+    if message.caption is None:  # Исправление строки 346
+        await message.answer("Укажите страницу для баннера")
+        return
+
     image_id = message.photo[-1].file_id
     for_page = message.caption.strip()
     pages_names = [page.name for page in await orm_get_info_pages(session)]
@@ -361,7 +399,8 @@ async def add_banner2(message: types.Message) -> None:
 
 
 # Handler для добавления/изменения изображения товара
-@admin_router.message(OrderProcess.ADD_IMAGES, or_f(F.photo, F.casefold()))
+@admin_router.message(OrderProcess.ADD_IMAGES, or_f(F.photo,
+                                                    F.casefold()))
 async def add_image(message: types.Message, state: FSMContext,
                     session: AsyncSession) -> None:
     # Проверяем, если пользователь хочет оставить старое изображение
@@ -385,7 +424,8 @@ async def add_image(message: types.Message, state: FSMContext,
             # Добавляем товар
             await orm_add_product(session, data)
         # Сообщение об успехе
-        await message.answer("Товар добавлен/Изменен", reply_markup=ADMIN_KB)
+        await message.answer("Товар добавлен/Изменен",
+                             reply_markup=ADMIN_KB)
         # Сбрасываем состояние FSM
         await state.clear()
 
@@ -404,7 +444,7 @@ async def add_image(message: types.Message, state: FSMContext,
 
 # Handler для некорректного действия на шаге ADD_IMAGES
 @admin_router.message(OrderProcess.ADD_IMAGES)
-async def add_image2(message: types.Message):
+async def add_image2(message: types.Message) -> None:
     await message.answer("Отправьте фото пищи")
 
 
@@ -416,13 +456,15 @@ async def delete_product_callback(callback: types.CallbackQuery,
     """Обработчик удаления товара с проверкой данных"""
     # Проверяем наличие callback.data
     if not callback.data:
-        await callback.answer("❌ Ошибка: отсутствуют данные", show_alert=True)
+        await callback.answer("❌ Ошибка: отсутствуют данные",
+                              show_alert=True)
         return
 
     # Безопасное разделение данных
     parts = callback.data.split("_")
     if len(parts) < 2 or not parts[-1].isdigit():
-        await callback.answer("⚠️ Неверный формат запроса", show_alert=True)
+        await callback.answer("⚠️ Неверный формат запроса",
+                              show_alert=True)
         return
 
     product_id = int(parts[-1])
@@ -455,23 +497,32 @@ async def confirm_order_handler(
     Обработчик callback-запроса для подтверждения заказа.
 
     Данный обработчик вызывается при нажатии кнопки «✅ Подтвердить заказ».
-    Фильтр срабатывает, если значение поля `action` в callback_data равно "confirm".
+    Фильтр срабатывает,
+     если значение поля `action` в callback_data равно "confirm".
     Функция:
       1. Извлекает идентификатор заказа из callback_data.
-      2. Получает заказ из базы данных с блокировкой для избежания race condition.
+      2. Получает заказ из базы данных с блокировкой
+       для избежания race condition.
       3. Проверяет, найден ли заказ и не подтверждён ли он уже.
       4. Обновляет статус заказа на "confirmed" и сохраняет изменения.
       5. Отправляет уведомление пользователю о подтверждении заказа.
 
     Args:
         callback (types. CallbackQuery): Callback-запрос, полученный от бота.
-        callback_data (OrderAction): Данные, распакованные из callback_data, содержащие поля `action` и `order_id`.
-        session (AsyncSession): Асинхронная сессия SQLAlchemy для работы с базой данных.
+        callback_data (OrderAction):
+         Данные, распакованные из callback_data,
+          содержащие поля `action` и `order_id`.
+        session (AsyncSession):
+         Асинхронная сессия SQLAlchemy для работы с базой данных.
 
     Raises:
         Exception: При возникновении ошибки в процессе подтверждения заказа,
                    происходит откат изменений и отправка уведомления об ошибке.
     """
+    if callback.message is None:
+        logger.error("Сообщение недоступно")
+        return
+
     try:
         if not callback.bot:
             logger.error("Bot instance not available")
@@ -481,9 +532,11 @@ async def confirm_order_handler(
 
         # Получение заказа с блокировкой для предотвращения race condition
         async with session.begin():
-            order = await session.get(Order, order_id, with_for_update=True)
+            order: Optional[Order] = await session.get(Order, order_id,
+                                                       with_for_update=True)
             if not order:
-                await callback.answer("🚨 Заказ не найден", show_alert=True)
+                await callback.answer("🚨 Заказ не найден",
+                                      show_alert=True)
                 return
 
             if order.status == "confirmed":
@@ -531,19 +584,26 @@ async def cancel_order_handler(
     Фильтр срабатывает, если поле `action` в callback_data имеет значение "cancel".
 
     Процесс работы функции:
-      1. Получает заказ из базы данных по идентификатору, извлечённому из callback_data, с блокировкой записи для предотвращения race condition.
+      1. Получает заказ из базы данных по идентификатору,
+       извлечённому из callback_data, с блокировкой записи
+       для предотвращения race condition.
       2. Проверяет, существует ли заказ и не был ли он уже отменен.
-      3. Обновляет статус заказа на "cancelled" и сохраняет изменения в базе данных.
+      3. Обновляет статус заказа на "cancelled"
+       и сохраняет изменения в базе данных.
       4. Отправляет уведомление пользователю о том, что заказ отменён.
-      5. В случае возникновения ошибок происходит откат транзакции и отправка сообщения об ошибке.
+      5. В случае возникновения ошибок происходит откат
+       транзакции и отправка сообщения об ошибке.
 
     Args:
         callback (types. CallbackQuery): Callback-запрос, полученный от бота.
-        callback_data (OrderAction): Данные, распакованные из callback_data, содержащие поля `action` и `order_id`.
-        session (AsyncSession): Асинхронная сессия SQLAlchemy для работы с базой данных.
+        callback_data (OrderAction): Данные, распакованные
+         из callback_data, содержащие поля `action` и `order_id`.
+        session (AsyncSession): Асинхронная сессия
+        SQLAlchemy для работы с базой данных.
 
     Raises:
-        Exception: При возникновении ошибки во время отмены заказа происходит откат транзакции
+        Exception: При возникновении ошибки
+        во время отмены заказа происходит откат транзакции
                    и отправка уведомления об ошибке пользователю.
     """
     try:
@@ -555,7 +615,8 @@ async def cancel_order_handler(
 
         # Используем контекстный менеджер для транзакции
         async with session.begin():
-            # Получаем заказ с блокировкой для предотвращения конкурентного доступа
+            # Получаем заказ с блокировкой для
+            # предотвращения конкурентного доступа
             order = await session.get(
                 Order,
                 callback_data.order_id,
@@ -563,7 +624,8 @@ async def cancel_order_handler(
             )
 
             if not order:
-                await callback.answer("🚨 Заказ не найден", show_alert=True)
+                await callback.answer("🚨 Заказ не найден",
+                                      show_alert=True)
                 return
 
             if order.status == "cancelled":

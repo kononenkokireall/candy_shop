@@ -20,7 +20,6 @@ class Paginator:
     ) -> None:
         """
         Конструктор класса Paginator.
-
         Parameters:
             array (list | tuple): Список или кортеж данных для пагинации
             page (int): Текущая страница (по умолчанию 1)
@@ -43,10 +42,10 @@ class Paginator:
             self.pages,
         )
 
+
     def __get_slice(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
         Приватный метод для вычисления диапазона данных на текущей странице.
-
         Returns:
             list | tuple: Срез данных для текущей страницы.
         """
@@ -59,10 +58,10 @@ class Paginator:
         )
         return self.array[start:stop]
 
+
     def get_page(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
         Получение данных текущей страницы.
-
         Returns:
             list | tuple: Данные текущей страницы.
         """
@@ -72,10 +71,10 @@ class Paginator:
                      self.page, page_items)
         return page_items
 
+
     def has_next(self) -> Union[int, bool]:
         """
         Проверка наличия следующей страницы.
-
         Returns:
             bool | int: Номер следующей страницы или False,
              если следующей страницы нет.
@@ -87,10 +86,10 @@ class Paginator:
         logger.debug("Следующей страницы нет.")
         return False
 
+
     def has_previous(self) -> Union[int, bool]:
         """
         Проверка наличия предыдущей страницы.
-
         Returns:
             bool | int: Номер предыдущей страницы или False,
              если предыдущей страницы нет.
@@ -102,13 +101,12 @@ class Paginator:
         logger.debug("Предыдущей страницы нет.")
         return False
 
+
     def get_next(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
         Переход к следующей странице.
-
         Returns:
             list | tuple: Данные следующей страницы.
-
         Raises:
             IndexError: Если следующей страницы не существует.
         """
@@ -121,13 +119,12 @@ class Paginator:
         raise IndexError("Next page does not exist. Use has_next()"
                          " to check before.")
 
+
     def get_previous(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
         Переход к предыдущей странице.
-
         Returns:
             list | tuple: Данные предыдущей страницы.
-
         Raises:
             IndexError: Если предыдущей страницы не существует.
         """

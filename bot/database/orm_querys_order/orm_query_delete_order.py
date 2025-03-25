@@ -9,7 +9,6 @@ from database.models import OrderItem, Order
 logger = logging.getLogger(__name__)
 
 
-######################## Удаление заказа #####################################
 async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
     """
     Безопасно удаляет заказ и все связанные данные

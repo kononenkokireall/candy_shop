@@ -23,8 +23,7 @@ async def orm_add_to_cart(
     Добавляет товар в корзину пользователя с использованием UPSERT.
     Если для комбинации (user_id, product_id) уже существует запись,
     увеличивается количество (quantity) на 1,
-
-     иначе создается новая запись с quantity=1.
+    иначе создается новая запись с quantity=1.
 
     Аргументы:
       - session: Асинхронная сессия SQLAlchemy.
@@ -115,46 +114,46 @@ async def orm_get_user_carts(
         return []
 
 
-async def orm_delete_from_cart(
-        session: AsyncSession, user_id: int, product_id: Optional[int] = None
-) -> bool:
-    """
-    Удаляет товар(ы) из корзины пользователя.
-    Если указан product_id, удаляется только соответствующая запись,
-    иначе удаляются все товары для данного пользователя.
-
-    Аргументы:
-      - session: Асинхронная сессия SQLAlchemy.
-      - user_id: Идентификатор пользователя.
-      - product_id: (Опционально) Идентификатор товара для удаления.
-
-    Возвращает:
-      - True, если были удалены записи; False,
-       если не было записей для удаления.
-    """
-    try:
-        # Формируем запрос на удаление записей из корзины
-        # для указанного пользователя
-        query = delete(Cart).where(Cart.user_id == user_id)
-        if product_id:
-            query = query.where(Cart.product_id == product_id)
-            msg = f"product {product_id}"
-        else:
-            msg = "all products"
-
-        result = await session.execute(query)
-
-        if result.rowcount > 0:
-            logger.info(f"Deleted {msg} from user {user_id}'s cart")
-            return True
-
-        logger.warning(f"No items deleted for user {user_id}")
-        return False
-
-    except SQLAlchemyError as e:
-        logger.error(f"Database error: {str(e)}")
-        await session.rollback()
-        return False
+# async def orm_delete_from_cart(
+#         session: AsyncSession, user_id: int, product_id: Optional[int] = None
+# ) -> bool:
+#     """
+#     Удаляет товар(ы) из корзины пользователя.
+#     Если указан product_id, удаляется только соответствующая запись,
+#     иначе удаляются все товары для данного пользователя.
+#
+#     Аргументы:
+#       - session: Асинхронная сессия SQLAlchemy.
+#       - user_id: Идентификатор пользователя.
+#       - product_id: (Опционально) Идентификатор товара для удаления.
+#
+#     Возвращает:
+#       - True, если были удалены записи; False,
+#        если не было записей для удаления.
+#     """
+#     try:
+#         # Формируем запрос на удаление записей из корзины
+#         # для указанного пользователя
+#         query = delete(Cart).where(Cart.user_id == user_id)
+#         if product_id:
+#             query = query.where(Cart.product_id == product_id)
+#             msg = f"product {product_id}"
+#         else:
+#             msg = "all products"
+#
+#         result = await session.execute(query)
+#
+#         if result.rowcount > 0:
+#             logger.info(f"Deleted {msg} from user {user_id}'s cart")
+#             return True
+#
+#         logger.warning(f"No items deleted for user {user_id}")
+#         return False
+#
+#     except SQLAlchemyError as e:
+#         logger.error(f"Database error: {str(e)}")
+#         await session.rollback()
+#         return False
 
 
 async def orm_reduce_product_in_cart(
@@ -190,20 +189,39 @@ async def orm_reduce_product_in_cart(
 
             if not cart_item:
                 logger.warning("No cart item found")
-                return None
+                return False
 
             # Если количество больше 1, уменьшаем его на 1.
             if cart_item.quantity > 1:
                 cart_item.quantity -= 1
                 logger.info(f"New quantity: {cart_item.quantity}")
                 return True
-            else:
-                # Если количество равно 1, удаляем запись из корзины.
-                await session.delete(cart_item)
-                logger.info("Item removed from cart")
-                return False
+            return False
 
     except SQLAlchemyError as e:
         logger.error(f"Database error: {str(e)}")
         await session.rollback()
         return None
+
+
+async def orm_full_remove_from_cart(
+        session: AsyncSession,
+        user_id: int,
+        product_id: int
+) -> bool:
+    """Полное удаление товара из корзины"""
+    try:
+        async with session.begin():
+            result = await session.execute(
+                delete(Cart)
+                .where(
+                    Cart.user_id == user_id,
+                    Cart.product_id == product_id
+                )
+            )
+            return result.rowcount > 0
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {e}")
+        await session.rollback()
+        return False

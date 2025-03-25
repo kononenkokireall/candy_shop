@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Cart, Banner
 from database.orm_querys.orm_query_banner import orm_get_banner
 from database.orm_querys.orm_query_cart import (
-    orm_delete_from_cart,
+    # orm_delete_from_cart,
     orm_reduce_product_in_cart,
     orm_add_to_cart,
-    orm_get_user_carts,
+    orm_get_user_carts, orm_full_remove_from_cart,
 )
 from handlers.menu_events.menu_paginator_navi import pages
 from keyboards.inline_cart import get_user_cart_btn
@@ -44,7 +44,7 @@ async def carts(
     """
     # Обработка действий с корзиной
     if menu_name == "delete":
-        await orm_delete_from_cart(session, user_id, product_id)
+        await orm_full_remove_from_cart(session, user_id, product_id)
         if page > 1:
             page -= 1
     elif menu_name == "decrement":

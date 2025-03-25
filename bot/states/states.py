@@ -15,6 +15,7 @@ class OrderProcess(StatesGroup):
     TEXTS = {
         'OrderProcess:NAME': 'Введите название заново:',
         'OrderProcess:DESCRIPTION': 'Введите описание заново:',
+        'OrderProcess:CATEGORY': 'Выберете категорию заново:',
         'OrderProcess:PRICE': 'Введите стоимость заново:',
         'OrderProcess:ADD_IMAGES': 'Добавьте изображение меньше размером:',
     }

@@ -7,7 +7,6 @@ from aiogram import Bot
 class NotificationService:
     """
     Сервис для отправки уведомлений через Telegram бота.
-
     Attributes:
         bot: Экземпляр Telegram бота для отправки сообщений
         admin_chat_id: ID чата администратора для получения уведомлений
@@ -19,7 +18,6 @@ class NotificationService:
                  ) -> None:
         """
         Инициализация сервиса уведомлений.
-
         Args:
             bot: Экземпляр aiogram Bot
             admin_chat_id: Числовой идентификатор чата администратора
@@ -31,10 +29,8 @@ class NotificationService:
     async def send_to_admin(self, text: str, **kwargs: Any) -> bool:
         """
         Отправляет сообщение администратору, если бот доступен.
-
         Returns:
             bool: Успешность отправки (True/False)
-
         Raises:
             ValueError: Если бот не инициализирован
         """

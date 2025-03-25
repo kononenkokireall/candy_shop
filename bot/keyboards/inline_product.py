@@ -13,13 +13,12 @@ def get_user_product_btn(
         page: int,
         pagination_btn: Optional[Dict[str, str]] = None,
         product_id: int,
-        sizes: Tuple[int, ...] = (2, 1)
-) -> InlineKeyboardMarkup:
+        sizes: Tuple[int, ...] = (2, 1),) -> InlineKeyboardMarkup:
     """
     Функция для построения inline-клавиатуры для работы с товарами пользователя.
 
     Параметры:
-    - level: Текущий уровень меню (используется для формирования callback-данных).
+    - level: Текущий уровень меню (исп. Для формирования callback-данных).
     - category: Идентификатор категории, к которой относится товар.
     - page: Текущая страница для пагинации.
     - pagination_btn: Словарь, определяющий кнопки пагинации.
@@ -53,7 +52,8 @@ def get_user_product_btn(
         ),
         InlineKeyboardButton(
             text="Корзина 🛒",
-            callback_data=MenuCallBack(level=3, menu_name="cart", product_id=42).pack(),
+            callback_data=MenuCallBack(level=3, menu_name="cart", page=1,
+            ).pack(),
         ),
         InlineKeyboardButton(
             text="Купить 💵",
