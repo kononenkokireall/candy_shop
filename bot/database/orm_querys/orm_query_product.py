@@ -11,13 +11,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Опции для пред загрузки связанных объектов
 from sqlalchemy.orm import selectinload
 
+from cache.decorators import cached
+from cache.invalidator import CacheInvalidator
 # Импорт моделей, используемых в запросах
 from database.models import Product, Category
 
 # Настройка логгера для модуля
 logger = logging.getLogger(__name__)
 
+PRODUCT_TTL = 3600  # 1 час
 
+
+# Функция Создает новый товар в базе данных с полной валидацией данных.
 async def orm_add_product(
         session: AsyncSession,
         data: Dict[str, Any]
@@ -80,6 +85,7 @@ async def orm_add_product(
             # сгенерированный ID товара до коммит
             await session.flush()
             logger.info(f"Товар {product.id} создан: {product.name}")
+            await CacheInvalidator.invalidate_by_pattern("products:*")
             return product
 
     except exc.SQLAlchemyError as e:
@@ -93,42 +99,37 @@ async def orm_add_product(
         raise RuntimeError("Внутренняя ошибка сервера") from e
 
 
+# Функция Получает список товаров определенной категории с поддержкой пагинации.
+@cached("products:category:{category_id}:limit:{limit}:offset:{offset}",
+        ttl=PRODUCT_TTL)
 async def orm_get_products(
         session: AsyncSession,
         category_id: int,
         limit: int = 100,
         offset: int = 0
 ) -> Sequence[Product]:
-    """
-    Получает список товаров определенной категории с поддержкой пагинации.
+    logger.debug(f"Запрос товаров категории {category_id}")
 
-    Параметры:
-      - session: Асинхронная сессия БД.
-      - category_id: ID категории, для которой запрашиваются товары.
-      - limit: Максимальное количество товаров для выборки.
-      - offset: Смещение выборки (для реализации пагинации).
-
-    Возвращает:
-      - Sequence[Product]: Список объектов Product,
-       соответствующих заданной категории.
-
-    Исключения:
-      - RuntimeError: Если возникает ошибка
-       при выполнении запроса к базе данных.
-    """
-    logger.debug(f"Запрос товаров категории {category_id} [limit={limit}]")
+    # Проверка существования категории
+    category_exists = await session.execute(
+        select(Category.id).where(Category.id == category_id)
+        # Исправлено: закрывающая скобка
+    )
+    if not category_exists.scalar():
+        raise ValueError(f"Категория {category_id} не найдена")
 
     try:
-        result = await session.execute(
+        # Формируем запрос с правильным синтаксисом
+        query = (
             select(Product)
             .where(Product.category_id == category_id)
-            .options(
-                selectinload(Product.category)
-            )  # Пред загрузка информации о категории
+            .options(selectinload(Product.category))
             .order_by(Product.name)
             .limit(limit)
             .offset(offset)
         )
+
+        result = await session.execute(query)
         return result.scalars().all()
 
     except exc.SQLAlchemyError as e:
@@ -136,6 +137,8 @@ async def orm_get_products(
         raise RuntimeError("Ошибка запроса данных") from e
 
 
+# Функция Получает полную информацию о товаре по его ID.
+@cached("product:{product_id}", ttl=PRODUCT_TTL)
 async def orm_get_product(
         session: AsyncSession,
         product_id: int
@@ -170,6 +173,7 @@ async def orm_get_product(
         raise RuntimeError("Ошибка запроса товара") from e
 
 
+# Функция Обновляет данные товара по его ID с использованием переданных данных.
 async def orm_update_product(
         session: AsyncSession,
         product_id: int,
@@ -236,6 +240,10 @@ async def orm_update_product(
                 .values(**updates)
                 .returning(Product.id)
             )
+            await CacheInvalidator.invalidate([
+                f"product:{product_id}",
+                "products:*"
+            ])
             # Если возвращается ID обновленного товара, операция успешна
             return bool(result.scalar_one_or_none())
 
@@ -244,6 +252,7 @@ async def orm_update_product(
         raise RuntimeError("Ошибка обновления данных") from e
 
 
+# Функция Удаляет товар по его ID.
 async def orm_delete_product(
         session: AsyncSession,
         product_id: int
@@ -269,6 +278,10 @@ async def orm_delete_product(
                 delete(Product).where(Product.id == product_id)
                 .returning(Product.id)
             )
+            await CacheInvalidator.invalidate([
+                f"product:{product_id}",
+                "products:*"
+            ])
             return bool(result.scalar_one_or_none())
 
     except exc.SQLAlchemyError as e:

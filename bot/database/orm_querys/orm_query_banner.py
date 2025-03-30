@@ -4,13 +4,21 @@ from typing import Dict, Optional, Sequence
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cache.decorators import cached
+from cache.invalidator import CacheInvalidator
 from database.models import Banner
 
 # Настраиваем логгер для модуля.
 # Все сообщения логгируются с использованием этого логгера.
 logger = logging.getLogger(__name__)
+BANNER_TTL = 3600  # 1 час
 
 
+class DefaultImageNotFoundError(Exception):
+    pass
+
+
+# Функция проверяет, существуют ли уже записи в таблице Banner.
 async def orm_add_banner_description(
         session: AsyncSession,
         data: Dict[str, str]
@@ -46,6 +54,10 @@ async def orm_add_banner_description(
         ]
         # Добавляем созданные объекты в сессию.
         session.add_all(banners)
+
+        await CacheInvalidator.invalidate_by_pattern("banners:*")
+        await CacheInvalidator.invalidate_by_pattern("banner:*")
+
         logger.info("Баннеры успешно добавлены")
     except Exception as e:
         # Логируем исключение,
@@ -55,6 +67,8 @@ async def orm_add_banner_description(
         raise
 
 
+# Функция изменяет изображение и (опционально)
+# ссылку администратора для баннера с заданным именем.
 async def orm_change_banner_image(
         session: AsyncSession,
         name: str,
@@ -63,7 +77,7 @@ async def orm_change_banner_image(
 ) -> None:
     """
     Функция изменяет изображение и (опционально)
-     ссылку администратора для баннера с заданным именем.
+    ссылку администратора для баннера с заданным именем.
 
     Параметры:
       - session: асинхронная сессия SQLAlchemy.
@@ -73,34 +87,52 @@ async def orm_change_banner_image(
     """
     logger.info(f"Обновление изображения баннера '{name}'")
     try:
-        # Формируем запрос для обновления записи в таблице Banner,
-        # где имя совпадает с переданным.
-        query = (
-            update(Banner)
-            .where(Banner.name == name)
-            .values(image=image, admin_link=admin_link)
-        )
-        result = await session.execute(query)
+        async with session.begin():  # Явное управление транзакцией
+            # Формируем запрос на обновление
+            update_query = (
+                update(Banner)
+                .where(Banner.name == name)
+                .values(image=image, admin_link=admin_link)
+            )
 
-        # Проверяем количество затронутых строк,
-        # чтобы убедиться, что запись была обновлена.
-        if result.rowcount and result.rowcount > 0:
-            logger.info(f"Изображение баннера '{name}' успешно обновлено")
-        else:
-            logger.warning(f"Баннер '{name}' не найден или данные не изменены")
+            # Выполняем запрос
+            result = await session.execute(update_query)
+
+            if result.rowcount == 0:
+                logger.warning(f"Баннер '{name}' не найден")
+                raise ValueError(f"Баннер {name} не существует")
+
+            # Инвалидация кэша
+            await CacheInvalidator.invalidate([
+                f"banner:{name}",
+                "banners:all",
+                "banners:info_pages",
+                f"banners:{name}",
+                f"menu:*{name}*",
+                f"menu:*page={name}*"
+            ])
+            await CacheInvalidator.invalidate_by_pattern(f"*{name}*")  # Важно!
+
+            logger.info(
+                f"Баннер '{name}' успешно обновлен. Кэш инвалидирован.")
+
+    except ValueError as ve:
+        logger.error(f"Ошибка валидации: {str(ve)}")
+        raise  # Пробрасываем выше для обработки в вызывающем коде
+
     except Exception as e:
-        # Логируем ошибку с информацией о баннере,
-        # откатываем транзакцию и пробрасываем исключение.
-        logger.exception(f"Ошибка при обновлении изображения баннера {e}"
-                         f" '{name}'")
-        await session.rollback()
+        logger.critical(f"Критическая ошибка при обновлении баннера: {str(e)}")
+        await session.rollback()  # Явный откат на случай ошибок вне транзакции
         raise
 
 
+# Функция возвращает баннер для указанной страницы.
+@cached("banner:{page}", ttl=BANNER_TTL)
 async def orm_get_banner(
         session: AsyncSession,
         page: str) \
         -> Optional[Banner]:
+
     """
     Функция возвращает баннер для указанной страницы.
 
@@ -111,6 +143,10 @@ async def orm_get_banner(
     Возвращает:
       - Объект баннера, если он найден, иначе None.
     """
+    if not page:
+        logger.error("Попытка получить баннер с page=None")
+        raise ValueError("Page name cannot be None or empty")
+
     logger.info(f"Запрос баннера для страницы '{page}'")
     try:
         # Формируем запрос для получения баннера по его имени (page).
@@ -118,12 +154,10 @@ async def orm_get_banner(
         result = await session.execute(query)
         banner = result.scalar()  # Получаем один объект баннера
 
-        if banner:
-            logger.info(f"Баннер '{page}' найден")
-        else:
-            logger.warning(f"Баннер '{page}' не найден")
-
+        if not banner:
+            raise DefaultImageNotFoundError(f"Баннер '{page}' не найден")
         return banner
+
     except Exception as e:
         # Логируем ошибку при выполнении запроса и пробрасываем исключение.
         logger.exception(f"Ошибка при запросе баннера для страницы {e}"
@@ -131,13 +165,16 @@ async def orm_get_banner(
         raise
 
 
+@cached("banners:all", ttl=BANNER_TTL)
+# Функция возвращает список информационных баннеров.
 async def orm_get_info_pages(
         session: AsyncSession,
-        page: Optional[str] = None) -> Sequence[Banner]:
+        page: Optional[str] = None
+) -> Sequence[Banner]:
     """
     Функция возвращает список информационных баннеров.
     Если параметр page указан,
-     возвращает только баннер для конкретной страницы.
+    возвращает только баннер для конкретной страницы.
 
     Параметры:
       - session: асинхронная сессия SQLAlchemy.
@@ -161,7 +198,6 @@ async def orm_get_info_pages(
         result = await session.execute(query)
         # Получаем все объекты баннеров в виде списка.
         banners = result.scalars().all()
-
         if banners:
             logger.info(f"Найдено {len(banners)} баннеров")
         else:

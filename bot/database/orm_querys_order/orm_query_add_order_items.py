@@ -2,12 +2,16 @@ from typing import List, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, exc
 import logging
+
+from cache.invalidator import CacheInvalidator
 from database.models import Product, OrderItem
 
 # Настраиваем логгер для данного модуля
 logger = logging.getLogger(__name__)
 
 
+# Функция Добавляет список товаров в указанный заказ
+# с валидацией и обработкой ошибок.
 async def orm_add_order_items(
         session: AsyncSession,
         order_id: int,
@@ -113,6 +117,7 @@ async def orm_add_order_items(
             await session.execute(insert(OrderItem), insert_data)
         logger.info(f"Успешно добавлено {len(items)}"
                     f" товаров в заказ {order_id}")
+        await CacheInvalidator.invalidate([f"order:{order_id}"])
         return len(items)
 
     except exc.SQLAlchemyError as e:

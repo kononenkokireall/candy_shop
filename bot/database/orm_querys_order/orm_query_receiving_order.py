@@ -3,13 +3,21 @@ from typing import Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import exc, select
+
+from cache.decorators import cached
 from database.models import Order
 
 logger = logging.getLogger(__name__)
 
+ORDER_TTL = 900  # 15 минут
 
+# Функция Получает список заказов пользователя с пагинацией
+@cached("orders:user:{user_id}", ttl=ORDER_TTL)
 async def orm_get_user_orders(
-        session: AsyncSession, user_id: int, limit: int = 100, offset: int = 0
+        session: AsyncSession,
+        user_id: int,
+        limit: int = 100,
+        offset: int = 0
 ) -> Sequence[Order]:
     """
     Получает список заказов пользователя с пагинацией
@@ -65,7 +73,7 @@ async def orm_get_user_orders(
         else:
             logger.info(f"Заказы для пользователя {user_id} не найдены")
 
-        return orders
+        return [order.to_dict() for order in orders]
 
     except exc.SQLAlchemyError as e:
         logger.error(f"Ошибка БД при получении заказов: {str(e)}")

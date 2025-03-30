@@ -2,6 +2,7 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
+# Состояния для процесса взаимодействия с ботом
 class OrderProcess(StatesGroup):
     """Состояния для процесса взаимодействия с ботом"""
     NAME = State()  # Этап регистрации (ввод имени)
@@ -21,5 +22,6 @@ class OrderProcess(StatesGroup):
     }
 
 
+# Класс состояний FSM для загрузки баннеров через админ-панель
 class AddBanner(StatesGroup):
     IMAGE = State()

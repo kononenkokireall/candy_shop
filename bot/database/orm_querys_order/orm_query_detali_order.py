@@ -4,11 +4,17 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import exc, select
+
+
+from cache.decorators import cached
 from database.models import Order, OrderItem
 
 logger = logging.getLogger(__name__)
 
+ORDER_TTL = 900  # 15 минут
 
+# Функция Получает полную информацию о заказе с детализацией товаров
+@cached("order:{order_id}", ttl=ORDER_TTL)
 async def orm_get_order_details(
         session: AsyncSession, order_id: int
 ) -> Optional[Order]:
@@ -54,7 +60,7 @@ async def orm_get_order_details(
         else:
             logger.warning(f"Заказ {order_id} не найден в базе данных")
 
-        return order
+        return order.to_dict() if order else None
 
     except exc.SQLAlchemyError as e:
         logger.error(f"Ошибка БД при получении заказа {order_id}: {str(e)}")

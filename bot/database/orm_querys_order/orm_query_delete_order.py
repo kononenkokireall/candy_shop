@@ -3,13 +3,18 @@ import logging
 from sqlalchemy import delete, exc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cache.invalidator import CacheInvalidator
 from database.models import OrderItem, Order
 
 # Настраиваем логгер
 logger = logging.getLogger(__name__)
 
 
-async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
+# Функция Безопасно удаляет заказ и все связанные данные
+async def orm_delete_order(
+        session: AsyncSession,
+        order_id: int
+) -> bool:
     """
     Безопасно удаляет заказ и все связанные данные
 
@@ -38,6 +43,10 @@ async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
             )
 
             if deleted_id:
+                # Инвалидация кэша заказа и списка заказов
+                await CacheInvalidator.invalidate([
+                    f"order:{order_id}"
+                ])
                 logger.info(f"Заказ {order_id} успешно удален")
                 return True
 

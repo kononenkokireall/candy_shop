@@ -5,12 +5,16 @@ from sqlalchemy import select, update, delete, exc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from cache.decorators import cached
+from cache.invalidator import CacheInvalidator
 from database.models import Product, Order, OrderItem
 
 # Настраиваем логгер для данного модуля
 logger = logging.getLogger(__name__)
 
+ORDER_TTL = 900  # 15 минут
 
+# Создает новый заказ с полной валидацией и обработкой ошибок.
 async def orm_create_order(
         session: AsyncSession,
         user_id: int,
@@ -119,6 +123,7 @@ async def orm_create_order(
 
             logger.info(f"Заказ {order.id} успешно создан с"
                         f" {len(items)} позициями")
+            await CacheInvalidator.invalidate([f"orders:user:{user_id}"])
             return order
 
     except exc.SQLAlchemyError as e:
@@ -126,8 +131,13 @@ async def orm_create_order(
         raise RuntimeError("Ошибка создания заказа") from e
 
 
+# Функция Получает список заказов пользователя с поддержкой пагинации.
+@cached("orders:user:{user_id}", ttl=ORDER_TTL)
 async def orm_get_user_orders(
-        session: AsyncSession, user_id: int, limit: int = 100, offset: int = 0
+        session: AsyncSession,
+        user_id: int,
+        limit: int = 100,
+        offset: int = 0
 ) -> Sequence[Order]:
     """
     Получает список заказов пользователя с поддержкой пагинации.
@@ -166,8 +176,12 @@ async def orm_get_user_orders(
         raise RuntimeError("Ошибка получения заказов") from e
 
 
+# Функция Получает полную информацию о заказе,
+# включая позиции и связанные данные о товарах.
+@cached("order:{order_id}", ttl=ORDER_TTL)
 async def orm_get_order_details(
-        session: AsyncSession, order_id: int
+        session: AsyncSession,
+        order_id: int
 ) -> Optional[Order]:
     """
     Получает полную информацию о заказе,
@@ -199,8 +213,11 @@ async def orm_get_order_details(
         raise RuntimeError("Ошибка получения деталей заказа") from e
 
 
+# Функция Обновляет статус заказа.
 async def orm_update_order_status(
-        session: AsyncSession, order_id: int, new_status: str
+        session: AsyncSession,
+        order_id: int,
+        new_status: str
 ) -> bool:
     """
     Обновляет статус заказа.
@@ -228,6 +245,7 @@ async def orm_update_order_status(
 
         if updated:
             await session.commit()
+            await CacheInvalidator.invalidate([f"order:{order_id}"])
             return True
         return False
 
@@ -237,7 +255,11 @@ async def orm_update_order_status(
         raise RuntimeError("Ошибка обновления статуса заказа") from e
 
 
-async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
+# Функция Удаляет заказ и все связанные с ним элементы (позиции заказа).
+async def orm_delete_order(
+        session: AsyncSession,
+        order_id: int
+) -> bool:
     """
     Удаляет заказ и все связанные с ним элементы (позиции заказа).
 
@@ -262,6 +284,7 @@ async def orm_delete_order(session: AsyncSession, order_id: int) -> bool:
             result = await session.execute(
                 delete(Order).where(Order.id == order_id).returning(Order.id)
             )
+            await CacheInvalidator.invalidate([f"order:{order_id}"])
             return bool(result.scalar_one_or_none())
 
     except exc.SQLAlchemyError as e:

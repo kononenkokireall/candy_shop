@@ -23,6 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Функция Обрабатывает оформление заказа пользователя.
 async def checkout(
         session: AsyncSession,
         user_id: int,
@@ -112,8 +113,10 @@ async def checkout(
         return user_content
 
 
+# Функция Форматирует уведомление для администратора о новом заказе.
 async def format_admin_notification(
-        order_id: int) -> Tuple[str, InlineKeyboardMarkup]:
+        order_id: int
+) -> Tuple[str, InlineKeyboardMarkup]:
     """
     Форматирует уведомление для администратора о новом заказе.
 

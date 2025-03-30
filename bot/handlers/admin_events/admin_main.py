@@ -56,14 +56,19 @@ ADMIN_KB = get_keyboard(
 
 # Handler команды /admin для входа в функционал администратора
 @admin_router.message(Command("admin"))
-async def admin_question(message: types.Message) -> None:
+async def admin_question(
+        message: types.Message
+) -> None:
     await message.answer("Что хотите сделать?", reply_markup=ADMIN_KB)
 
 
 # Handler команды (отмена) и сброса состояния
 @admin_router.message(StateFilter("*"), Command("отмена"))
 @admin_router.message(StateFilter("*"), F.text.casefold() == "отмена")
-async def cancel_handler(message: types.Message, state: FSMContext) -> None:
+async def cancel_handler(
+        message: types.Message,
+        state: FSMContext
+) -> None:
     current_state = await state.get_state()
     # Получаем текущее состояние машины состояний
     if current_state is None:
@@ -81,7 +86,10 @@ async def cancel_handler(message: types.Message, state: FSMContext) -> None:
 # Handler для команды(возврата на шаг назад в FSM)
 @admin_router.message(StateFilter("*"), Command("назад"))
 @admin_router.message(StateFilter("*"), F.text.casefold() == "назад")
-async def back_step_handler(message: types.Message, state: FSMContext) -> None:
+async def back_step_handler(
+        message: types.Message,
+        state: FSMContext
+) -> None:
     # Получаем текущее состояние FSM
     current_state = await state.get_state()
 
@@ -112,9 +120,12 @@ async def back_step_handler(message: types.Message, state: FSMContext) -> None:
         previous = step
 
 
-# Становимся в состояние ожидания ввода name
+# Handler Становимся в состояние ожидания ввода name
 @admin_router.message(StateFilter(None), F.text == "Добавить товар")
-async def add_product(message: types.Message, state: FSMContext) -> None:
+async def add_product(
+        message: types.Message,
+        state: FSMContext
+) -> None:
     await message.answer(
         "Введите название товара",
         reply_markup=types.ReplyKeyboardRemove()
@@ -124,13 +135,15 @@ async def add_product(message: types.Message, state: FSMContext) -> None:
 
 # Handler для отображения ассортимента (категорий товаров)
 @admin_router.message(F.text == 'Ассортимент')
-async def admin_features(message: types.Message,
-                         session: AsyncSession) -> None:
+async def admin_features(
+        message: types.Message,
+        session: AsyncSession
+) -> None:
     # Получаем категории из базы данных
     categories = await orm_get_categories(session)
     # Генерируем кнопки с категориями
-    btn = {category.name: f'category_{category.id}'
-           for category in categories if category.name is not None}
+    btn = {category["name"]: f'category_{category["id"]}'
+           for category in categories if category["name"] is not None}
     await message.answer("Выберите категорию",
                          reply_markup=get_callback_btn(btn=btn))
 
@@ -138,8 +151,11 @@ async def admin_features(message: types.Message,
 # Handler для отправки перечня информационных
 # страниц и входа в состояние загрузки изображения
 @admin_router.message(StateFilter(None), F.text == 'Добавить/Изменить баннер')
-async def add_and_change_image(message: types.Message, state: FSMContext,
-                               session: AsyncSession) -> None:
+async def add_and_change_image(
+        message: types.Message,
+        state: FSMContext,
+        session: AsyncSession
+) -> None:
     # Получаем список страниц
     pages_names = [page.name for page in await orm_get_info_pages(session)]
     await message.answer(f"Отправьте фото баннера.\n"
@@ -187,7 +203,10 @@ async def change_product_callback(
 # Handler для введения изменения названия товара.
 # Получаем данные для состояния name и потом меняем состояние на DESCRIPTION
 @admin_router.message(OrderProcess.NAME, F.text)
-async def add_name(message: types.Message, state: FSMContext) -> None:
+async def add_name(
+        message: types.Message,
+        state: FSMContext
+) -> None:
     if message.text is None:  # Добавляем проверку на None
         await message.answer("Введите название товара")
         return
@@ -226,8 +245,11 @@ async def add_name2(message: types.Message) -> None:
 
 # Handler для получения описания товара
 @admin_router.message(OrderProcess.DESCRIPTION, F.text)
-async def add_description(message: types.Message, state: FSMContext,
-                          session: AsyncSession) -> None:
+async def add_description(
+        message: types.Message,
+        state: FSMContext,
+        session: AsyncSession
+) -> None:
     if message.text is None:
         await message.answer("Введите описание товара")
         return
@@ -248,7 +270,7 @@ async def add_description(message: types.Message, state: FSMContext,
 
     # Генерация кнопок с категориями
     categories = await orm_get_categories(session)
-    btn = {category.name: str(category.id) for category in categories}
+    btn = {category["name"]: str(category["id"]) for category in categories}
     # Переход к выбору категории
     await message.answer("Выберите категорию",
                          reply_markup=get_callback_btn(btn=btn))
@@ -264,8 +286,10 @@ async def add_description2(message: types.Message) -> None:
 
 # Handler для отображения товаров из выбранной категории
 @admin_router.callback_query(F.data.startswith('category_'))
-async def starring_at_product(callback: types.CallbackQuery,
-                              session: AsyncSession) -> None:
+async def starring_at_product(
+        callback: types.CallbackQuery,
+        session: AsyncSession
+) -> None:
     if callback.data is None:
         await callback.answer("❌ Ошибка данных")
         return
@@ -299,15 +323,17 @@ async def starring_at_product(callback: types.CallbackQuery,
 
 # Handler для выбора категории через Callback
 @admin_router.callback_query(OrderProcess.CATEGORY)
-async def category_choice(callback: types.CallbackQuery, state: FSMContext,
-                          session: AsyncSession) -> None:
-
+async def category_choice(
+        callback: types.CallbackQuery,
+        state: FSMContext,
+        session: AsyncSession
+) -> None:
     if callback.data is None or not callback.data.isdigit():
         # Проверка данных
         await callback.answer("❌ Некорректные данные")
         return
 
-    if int(callback.data) in [category.id for category in
+    if int(callback.data) in [category["id"] for category in
                               await orm_get_categories(
                                   session)]:
         # Проверяем валидность выбранной категории
@@ -335,8 +361,10 @@ async def category_choice2(message: types.Message) -> None:
 
 # Handler для изменения цены товара
 @admin_router.message(OrderProcess.PRICE, F.text)
-async def add_price(message: types.Message, state: FSMContext) -> None:
-
+async def add_price(
+        message: types.Message,
+        state: FSMContext
+) -> None:
     if message.text is None:  # Проверка на None
         await message.answer("Введите цену товара")
         return
@@ -370,8 +398,11 @@ async def add_price2(message: types.Message) -> None:
 # (там уже есть записанные страницы по именам:
 # main, catalog, cart(для пустой корзины), about, payment, shipping
 @admin_router.message(AddBanner.IMAGE, F.photo)
-async def add_banner(message: types.Message, state: FSMContext,
-                     session: AsyncSession) -> None:
+async def add_banner(
+        message: types.Message,
+        state: FSMContext,
+        session: AsyncSession
+) -> None:
     if message.photo is None or len(message.photo) == 0:
         await message.answer("Отправьте фото баннера")
         return
@@ -401,8 +432,11 @@ async def add_banner2(message: types.Message) -> None:
 # Handler для добавления/изменения изображения товара
 @admin_router.message(OrderProcess.ADD_IMAGES, or_f(F.photo,
                                                     F.casefold()))
-async def add_image(message: types.Message, state: FSMContext,
-                    session: AsyncSession) -> None:
+async def add_image(
+        message: types.Message,
+        state: FSMContext,
+        session: AsyncSession
+) -> None:
     # Проверяем, если пользователь хочет оставить старое изображение
     if message.text and message.text == "." and OrderProcess.product_for_change:
         await state.update_data(image=OrderProcess.product_for_change.image)
@@ -450,8 +484,10 @@ async def add_image2(message: types.Message) -> None:
 
 # Handler для удаления товара
 @admin_router.callback_query(F.data.startswith("delete_"))
-async def delete_product_callback(callback: types.CallbackQuery,
-                                  session: AsyncSession) -> None:
+async def delete_product_callback(
+        callback: types.CallbackQuery,
+        session: AsyncSession
+) -> None:
     # Получаем ID продукта для удаления
     """Обработчик удаления товара с проверкой данных"""
     # Проверяем наличие callback.data
@@ -485,9 +521,8 @@ async def delete_product_callback(callback: types.CallbackQuery,
         await callback.answer("🚨 Ошибка при удалении", show_alert=True)
 
 
-@admin_router.callback_query(
-    OrderAction.filter(F.action == "confirm")
-)
+# Обработчик callback-запроса для подтверждения заказа.
+@admin_router.callback_query(OrderAction.filter(F.action == "confirm"))
 async def confirm_order_handler(
         callback: types.CallbackQuery,
         callback_data: OrderAction,
@@ -569,9 +604,8 @@ async def confirm_order_handler(
         await callback.answer("🚨 Ошибка подтверждения заказа", show_alert=True)
 
 
-@admin_router.callback_query(
-    OrderAction.filter(F.action == "cancel")
-)
+# Обработчик callback-запроса для отмены заказа.
+@admin_router.callback_query(OrderAction.filter(F.action == "cancel"))
 async def cancel_order_handler(
         callback: types.CallbackQuery,
         callback_data: OrderAction,

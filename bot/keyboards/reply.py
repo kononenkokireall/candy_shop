@@ -3,6 +3,8 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from typing_extensions import Optional
 
 
+# Функция для создания клавиатуры для Telegram бота
+# с заданными кнопками и настройками.
 def get_keyboard(
         *btn: str,
         placeholder: Optional[str] = None,

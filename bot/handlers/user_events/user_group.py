@@ -6,6 +6,7 @@ from aiogram.filters import Command
 from filters.chat_types import ChatTypeFilter
 # Фильтр типов чатов (группы, супергруппы)
 from common.restricted_words import restricted_words
+
 # Список запрещенных слов
 
 # Создаем роутер для обработки сообщений
@@ -15,12 +16,14 @@ user_group_router.message.filter(ChatTypeFilter(["group", "supergroup"]))
 # Фильтруем только групповые чаты
 user_group_router.edited_message.filter(
     ChatTypeFilter(["group", "supergroup"]))
-# То же самое, но для отредактированных сообщений
 
 
 # Handler для команды "/admin"
 @user_group_router.message(Command("admin"))
-async def get_admins(message: types.Message, bot: Bot) -> None:
+async def get_admins(
+        message: types.Message,
+        bot: Bot
+) -> None:
     """
     Когда пользователь в чате вводит команду "/admin",
     бот получает список администраторов чата и сохраняет их ID.

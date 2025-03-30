@@ -3,6 +3,8 @@ from typing import Literal
 from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from cache.invalidator import CacheInvalidator
 from database.models import Order
 
 logger = logging.getLogger(__name__)
@@ -11,8 +13,11 @@ logger = logging.getLogger(__name__)
 OrderStatus = Literal["pending", "processing", "completed", "cancelled"]
 
 
+# Функция Обновляет статус заказа с проверкой валидности данных
 async def orm_update_order_status(
-        session: AsyncSession, order_id: int, new_status: OrderStatus
+        session: AsyncSession,
+        order_id: int,
+        new_status: OrderStatus
 ) -> bool:
     """
     Обновляет статус заказа с проверкой валидности данных
@@ -47,6 +52,9 @@ async def orm_update_order_status(
             updated_order = result.scalar_one_or_none()
 
             if updated_order:
+                await CacheInvalidator.invalidate([
+                    f"order:{order_id}"
+                ])
                 logger.info(f"Статус заказа {order_id}"
                             f" успешно изменен на {new_status}")
                 return True

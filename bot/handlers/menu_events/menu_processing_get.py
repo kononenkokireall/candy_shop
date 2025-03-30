@@ -10,14 +10,16 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+
+# Роутер для получения контента меню в зависимости от уровня.
 async def get_menu_content(
-    session: AsyncSession,
-    level: int,
-    menu_name: str,
-    category: int | None = None,
-    page: int | None = None,
-    product_id: int | None = None,
-    user_id: int | None = None,
+        session: AsyncSession,
+        level: int,
+        menu_name: str,
+        category: int | None = None,
+        page: int | None = None,
+        product_id: int | None = None,
+        user_id: int | None = None,
 ):
     if level == 0:
         return await main_menu(session, level, menu_name)

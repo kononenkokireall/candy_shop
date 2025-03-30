@@ -2,13 +2,15 @@ import logging
 from typing import Optional, List, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import exc
+
+from cache.invalidator import CacheInvalidator
 from database.models import Order
 from database.orm_querys_order.orm_query_add_order_items import \
     orm_add_order_items
 
 logger = logging.getLogger(__name__)
 
-
+# Функция Создает новый заказ в базе данных
 async def orm_create_order(
         session: AsyncSession,
         user_id: int,
@@ -67,7 +69,7 @@ async def orm_create_order(
         await session.rollback()
         raise
 
-
+# Функция Добавляет товары в транзакции
 async def orm_add_order(
         session: AsyncSession,
         user_id: int,
@@ -117,7 +119,7 @@ async def orm_add_order(
             # Валидация общей суммы
             if abs(order.total_price - total_price) > 0.01:
                 raise ValueError("Расхождение в общей сумме заказа")
-
+            await CacheInvalidator.invalidate([f"orders:user:{user_id}"])
             logger.info(f"Заказ {order.id} успешно оформлен")
             return order
 

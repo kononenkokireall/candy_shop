@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from aiogram import Bot
 
-
+# Сервис для отправки уведомлений через Telegram бота.
 class NotificationService:
     """
     Сервис для отправки уведомлений через Telegram бота.

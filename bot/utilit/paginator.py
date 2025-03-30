@@ -11,6 +11,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+#  Конструктор класса Paginator.
 class Paginator:
     def __init__(
             self,
@@ -42,7 +43,6 @@ class Paginator:
             self.pages,
         )
 
-
     def __get_slice(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
         Приватный метод для вычисления диапазона данных на текущей странице.
@@ -58,7 +58,6 @@ class Paginator:
         )
         return self.array[start:stop]
 
-
     def get_page(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
         Получение данных текущей страницы.
@@ -70,7 +69,6 @@ class Paginator:
         logger.debug("Данные страницы %d: %s",
                      self.page, page_items)
         return page_items
-
 
     def has_next(self) -> Union[int, bool]:
         """
@@ -86,7 +84,6 @@ class Paginator:
         logger.debug("Следующей страницы нет.")
         return False
 
-
     def has_previous(self) -> Union[int, bool]:
         """
         Проверка наличия предыдущей страницы.
@@ -100,7 +97,6 @@ class Paginator:
             return self.page - 1
         logger.debug("Предыдущей страницы нет.")
         return False
-
 
     def get_next(self) -> Union[List[Any], Tuple[Any, ...]]:
         """
@@ -118,7 +114,6 @@ class Paginator:
         logger.error("Попытка перейти на несуществующую следующую страницу.")
         raise IndexError("Next page does not exist. Use has_next()"
                          " to check before.")
-
 
     def get_previous(self) -> Union[List[Any], Tuple[Any, ...]]:
         """

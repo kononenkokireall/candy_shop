@@ -1,4 +1,3 @@
-
 from typing import List, Any
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,9 +11,8 @@ def get_user_catalog_btn(
         *,
         level: int,
         categories: List[Any],
-        sizes: tuple[int, ...] = (2,),)\
+        sizes: tuple[int, ...] = (2,), ) \
         -> InlineKeyboardMarkup:
-
     """
     Создает inline-клавиатуру для каталога товаров, включающую кнопки "Назад",
      "Корзина"

@@ -13,6 +13,7 @@ class DataBaseSession(BaseMiddleware):
     # асинхронных сессий для работы с базой данных (async_session-maker).
     def __init__(self, session_pool: async_sessionmaker[AsyncSession]):
         self.session_pool = session_pool
+
     # Метод __call__ позволяет экземпляру класса DataBaseSession
     # быть вызываемым,
     # что необходимо для реализации middleware в aiogram.

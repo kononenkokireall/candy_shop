@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from keyboards.inline_main import MenuCallBack
 
 
+# Функция для построения inline-клавиатуры для работы с товарами пользователя.
 def get_user_product_btn(
         *,
         level: int,
@@ -13,7 +14,8 @@ def get_user_product_btn(
         page: int,
         pagination_btn: Optional[Dict[str, str]] = None,
         product_id: int,
-        sizes: Tuple[int, ...] = (2, 1),) -> InlineKeyboardMarkup:
+        sizes: Tuple[int, ...] = (2, 1),
+) -> InlineKeyboardMarkup:
     """
     Функция для построения inline-клавиатуры для работы с товарами пользователя.
 
@@ -53,7 +55,7 @@ def get_user_product_btn(
         InlineKeyboardButton(
             text="Корзина 🛒",
             callback_data=MenuCallBack(level=3, menu_name="cart", page=1,
-            ).pack(),
+                                       ).pack(),
         ),
         InlineKeyboardButton(
             text="Купить 💵",

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Tuple, Optional
 
 from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup, \
@@ -34,7 +35,19 @@ async def catalog(
 
     # Получаем категории
     raw_categories = await orm_get_categories(session)
-    categories_list: list[Category] = list(raw_categories)
+    # Конвертация данных в объекты Category
+    categories_list = []
+    for item in raw_categories:
+        # Работаем с объектами через атрибуты
+        category_data = {
+            'id': item.id,
+            'name': item.name,
+            'created_at': datetime.fromisoformat(
+                item.created.isoformat() if isinstance(item.created, datetime)
+                else item.created
+            )
+        }
+        categories_list.append(Category(**category_data))
 
     # Генерируем клавиатуру
     keyboard = get_user_catalog_btn(
@@ -94,6 +107,7 @@ async def products(
     return media, keyboard
 
 
+# Функция Возвращает клавиатуру для пустой страницы
 def get_empty_page_keyboard() -> InlineKeyboardMarkup:
     """Возвращает клавиатуру для пустой страницы"""
     builder = InlineKeyboardBuilder()
@@ -104,6 +118,7 @@ def get_empty_page_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+# Функция Возвращает клавиатуру для пустой категории
 def get_empty_product_keyboard() -> InlineKeyboardMarkup:
     """Возвращает клавиатуру для пустой категории"""
     builder = InlineKeyboardBuilder()

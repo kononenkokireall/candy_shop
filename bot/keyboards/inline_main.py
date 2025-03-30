@@ -23,6 +23,7 @@ class MenuCallBack(CallbackData, prefix="menu"):
     # Номер страницы меню.
     # Используется для пагинации, по умолчанию равен 1.
     product_id: Optional[int] = None
+
     # Идентификатор продукта,
     # если требуется. По умолчанию None.
 
@@ -51,7 +52,8 @@ def get_user_main_btn(
         *,
         level: int,
         sizes: tuple[int, ...] = (2,),
-        product_id: Optional[int] = None) -> InlineKeyboardMarkup:
+        product_id: Optional[int] = None
+) -> InlineKeyboardMarkup:
     """
     Создает inline-клавиатуру с основными кнопками главного меню.
 
@@ -95,9 +97,9 @@ def get_user_main_btn(
 
 # Универсальная функция для создания inline-клавиатуры из словаря.
 def get_callback_btn(
-    *,
-    btn: Dict[str, str],
-    sizes: tuple[int, ...] = (2,)
+        *,
+        btn: Dict[str, str],
+        sizes: tuple[int, ...] = (2,)
 ) -> InlineKeyboardMarkup:
     """
     Создает inline-клавиатуру на основе словаря,
@@ -121,4 +123,3 @@ def get_callback_btn(
     # Распределяем кнопки по рядам согласно заданным размерам
     # и возвращаем итоговую разметку.
     return cast(InlineKeyboardMarkup, keyboard.adjust(*sizes).as_markup())
-

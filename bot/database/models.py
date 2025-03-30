@@ -50,6 +50,15 @@ class Banner(Base):
     # для редактирования или просмотра деталей баннера.
     admin_link: Mapped[str] = mapped_column(String(150), nullable=True)
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "image": self.image,
+            "admin_link": self.admin_link
+        }
+
 
 # Модель Category представляет таблицу "category".
 class Category(Base):
@@ -64,6 +73,14 @@ class Category(Base):
     # Связь с продуктами, принадлежащими категории.
     # Back populates связывает это поле с полем category в модели Product.
     products: Mapped[list["Product"]] = relationship(back_populates="category")
+    created_at: Mapped[datetime] = mapped_column(DateTime,
+                                                 server_default=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+        }
 
 
 # Модель Product представляет таблицу "product".
@@ -123,8 +140,8 @@ class User(Base):
     # Фамилия пользователя, может отсутствовать.
     last_name: Mapped[str] = mapped_column(String(150), nullable=False)
     # Телефон пользователя.
-    phone: Mapped[str] = mapped_column(String(13), nullable=False,
-                                       server_default="Не указан")
+    phone: Mapped[str] = mapped_column(String(13), nullable=True,
+                                       server_default=None)
 
     # Связь с заказами, сделанными пользователем.
     # Cascade 'all, delete-orphan' означает,
@@ -204,6 +221,15 @@ class Order(Base):
         back_populates="order", cascade="all, delete-orphan",
         passive_deletes=True
     )
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "status": self.status,
+            "items": [item.to_dict() for item in self.items],
+            "created": self.created.isoformat()
+        }
+
 
 
 # Модель OrderItem представляет
@@ -238,3 +264,11 @@ class OrderItem(Base):
     # Определение связи с товаром.
     product: Mapped[Optional["Product"]] = relationship(
         back_populates="order_items")
+
+    def to_dict(self):
+        return {
+            "product_id": self.product_id,
+            "quantity": self.quantity,
+            "price": float(self.price)
+
+        }

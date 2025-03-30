@@ -1,100 +1,92 @@
 from typing import List, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from ..models import Category
+import json
 import logging
 
-# Настройка логгера для данного модуля
+from cache.decorators import cached
+from cache.invalidator import CacheInvalidator
+from ..models import Category
+from cache.redis import redis_cache  # Подключаем кэширование через Redis
+
 logger = logging.getLogger(__name__)
+CATEGORY_TTL = 86400  # 24 часа в секундах
 
 
+def dict_to_category(data: dict) -> Category:
+    """Преобразует словарь в объект Category"""
+    return Category(
+        id=data["id"],
+        name=data["name"],
+        created_at=data["created_at"],
+        created=data.get("created"),
+        updated=data.get("updated")
+    )
+
+
+@cached("categories_all", ttl=CATEGORY_TTL)
 async def orm_get_categories(session: AsyncSession) -> Sequence[Category]:
-    """
-    Получает все категории товаров из базы данных.
-
-    Параметры:
-      - session (AsyncSession): Асинхронная сессия для работы с базой данных.
-
-    Возвращает:
-      - Sequence[Category]: Список объектов Category,
-       содержащих все найденные категории.
-
-    Исключения:
-      - Прокидывает исключения, возникшие при выполнении запроса к базе данных.
-    """
     logger.info("Запрос всех категорий товаров")
-
     try:
-        # Формируем запрос для получения всех категорий
+        async with redis_cache.session() as redis:
+            cached_data = await redis.get("categories_all")
+            if cached_data:
+                logger.info("Загрузка категорий из кэша")
+                return [dict_to_category(cat) for cat in
+                        json.loads(cached_data)]
+
         result = await session.execute(select(Category))
-        # Извлекаем все объекты Category из результата запроса
         categories = result.scalars().all()
+        serialized_data = [{
+            "id": cat.id,
+            "name": cat.name,
+            "created_at": cat.created_at.isoformat(),
+            "created": cat.created.isoformat() if cat.created else None,
+            "updated": cat.updated.isoformat() if cat.updated else None,
+        } for cat in categories]
 
-        logger.debug(f"Найдено {len(categories)} категорий")
+        async with redis_cache.session() as redis:
+            await redis.setex("categories_all", CATEGORY_TTL,
+                              json.dumps(serialized_data))
+
         return categories
-
     except Exception as e:
-        # Логирование ошибки и откат транзакции в случае исключения
         logger.error(f"Ошибка получения категорий: {str(e)}")
-        await session.rollback()
+        if session.in_transaction():
+            await session.rollback()
         raise
 
 
 async def orm_create_categories(session: AsyncSession,
                                 categories: List[str]) -> int:
-    """
-    Создает новые уникальные категории в базе данных.
-
-    Параметры:
-      - session (AsyncSession): Асинхронная сессия для работы с базой данных.
-      - categories (List[str]): Список имен категорий,
-       которые необходимо добавить.
-
-    Возвращает:
-      - int: Количество успешно добавленных новых категорий.
-
-    Исключения:
-      - Прокидывает исключения, возникшие при выполнении запроса к базе данных.
-    """
     if not categories:
-        # Если передан пустой список категорий,
-        # логируем предупреждение и выходим
         logger.warning("Попытка добавления пустого списка категорий")
         return 0
 
     logger.info(f"Начало обработки {len(categories)} категорий")
-
     try:
-        # Проверка существующих категорий: выбираем имена из базы,
-        # которые совпадают с переданными
         existing = await session.execute(
             select(Category.name).where(Category.name.in_(categories))
         )
-        # Собираем существующие имена в множество для быстрого поиска
         existing_names = {name for name in existing.scalars()}
 
-        # Фильтруем список: оставляем только те категории, которых нет в базе
-        new_categories = [
-            Category(name=name)
-            for name in categories if name not in existing_names
-        ]
-
+        new_categories = [Category(name=name) for name in categories if
+                          name not in existing_names]
         if not new_categories:
             logger.info("Все категории уже существуют в базе")
             return 0
 
-        # Пакетное добавление новых категорий в сессию
         session.add_all(new_categories)
-        # Фиксируем изменения в базе данных
         await session.commit()
+
+        await CacheInvalidator.invalidate_by_pattern("categories:*")
+        async with redis_cache.session() as redis:
+            await redis.delete("categories_all")
 
         logger.info(f"Успешно добавлено {len(new_categories)} новых категорий")
         return len(new_categories)
-
     except Exception as e:
-        # В случае ошибки логируем критическую ошибку,
-        # откатываем транзакцию и пробрасываем исключение
-        logger.critical(f"Критическая ошибка при добавлении категорий:"
-                        f" {str(e)}")
+        logger.critical(
+            f"Критическая ошибка при добавлении категорий: {str(e)}")
         await session.rollback()
         raise

@@ -1,5 +1,3 @@
-# handlers/user_events/cart_handlers.py
-
 import logging
 from typing import Optional
 
@@ -20,8 +18,9 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
-
-@user_private_router.callback_query(MenuCallBack.filter(F.menu_name == "decrement"))
+# Уменьшает количество товара в корзине на 1 единицу.
+@user_private_router.callback_query(
+    MenuCallBack.filter(F.menu_name == "decrement"))
 async def decrement_product(
         callback: CallbackQuery,
         callback_data: MenuCallBack,
@@ -45,7 +44,9 @@ async def decrement_product(
     await callback.answer()
 
 
-@user_private_router.callback_query(MenuCallBack.filter(F.menu_name == "delete"))
+# Полностью удаляет товар из корзины пользователя.
+@user_private_router.callback_query(
+    MenuCallBack.filter(F.menu_name == "delete"))
 async def delete_product(
         callback: CallbackQuery,
         callback_data: MenuCallBack,
@@ -69,14 +70,16 @@ async def delete_product(
     await callback.answer()
 
 
+# Обновляет сообщение с корзиной после изменений.
 async def update_cart_message(
-    message: Message,
-    session: AsyncSession,
-    bot: Optional[Bot] = None
+        message: Message,
+        session: AsyncSession,
+        bot: Optional[Bot] = None
 ) -> None:
     """Обновляет сообщение с корзиной после изменений"""
     if message.from_user is None:
-        logger.warning("message.from_user is None, невозможно получить ID пользователя.")
+        logger.warning(
+            "message.from_user is None, невозможно получить ID пользователя.")
         return
 
     media: Optional[InputMediaPhoto] = None

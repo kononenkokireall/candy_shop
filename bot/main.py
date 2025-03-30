@@ -4,126 +4,116 @@
 """
 import asyncio
 import logging
-from typing import Final
+from typing import Final, List
 
-# Импорт компонентов aiogram
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-# Настройки бота по умолчанию
 from aiogram.enums import ParseMode
-# Режимы форматирования сообщений
-from aiogram.types import BotCommand
-# Модель для команд бота
+from aiogram.types import BotCommand, User as TgUser
+from redis.asyncio import Redis
 
-# Импорт компонентов проекта
 from database.engine import session_maker, create_db
-# Работа с SQLAlchemy
 from handlers.admin_events.admin_main import admin_router
-# Роутер для админ-панели
-from handlers.user_events.user_group import (
-    user_group_router,
-)  # Роутер для групповых чатов
-from handlers.user_events.user_main import (
-    user_private_router,
-)  # Роутер для личных чатов
+from handlers.user_events.user_group import user_group_router
+from handlers.user_events.user_main import user_private_router
 from middlewares.db import DataBaseSession
-# Middleware для работы с БД
 from utilit.config import settings
 
-# Настройки из .env файла
-
-# Настройка системы логирования
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,  # Уровень логирования INFO и выше
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    # Формат сообщений
-    force=True,  # Перезапись существующих обработчиков логирования
+    force=True,
 )
-# Снижаем уровень логирования для aiogram, чтобы избежать спама
 logging.getLogger("aiogram").setLevel(logging.WARNING)
 
-# Список команд бота для отображения в интерфейсе Telegram
-BOT_COMMANDS: Final = [
+BOT_COMMANDS: Final[List[BotCommand]] = [
     BotCommand(command="start", description="Старт"),
-    BotCommand(command="help", description="Помощь")
+    BotCommand(command="help", description="Помощь"),
 ]
-# Инициализация бота с токеном из настроек и HTML-форматированием
-bot = Bot(
-    token=settings.BOT_TOKEN, default=DefaultBotProperties(
-        parse_mode=ParseMode.HTML)
-)
 
-bot.my_admins_list = []
-# Создание диспетчера для обработки входящих сообщений
+class CustomBot(Bot):
+    def __init__(self):
+        super().__init__(
+            token=settings.BOT_TOKEN,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        )
+        self.admins: List[int] = []
+        self.redis: Redis = None
+
+bot = CustomBot()
 dp = Dispatcher()
 
-
 def register_routers() -> None:
-    """
-    Регистрация всех роутеров в диспетчере.
-    Роутеры отвечают за обработку разных типов сообщений:
-    - Личные сообщения
-    - Групповые чаты
-    - Админ. Команды
-    """
     routers = (user_private_router, user_group_router, admin_router)
     for router in routers:
         dp.include_router(router)
 
+async def connect_redis() -> Redis:
+    try:
+        return await Redis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            ssl_cert_reqs=None
+        )
+    except Exception as e:
+        logger.error(f"Redis connection error: {e}")
+        raise
 
 async def on_startup() -> None:
-    """Действия при запуске бота"""
-    logger.info("Инициализация базы данных...")
-    await create_db()  # Создание таблиц в БД
+    logger.info("Starting bot version 1.1.0")
+    logger.info(f"Environment: {settings.MODE}")
 
-    logger.info("Установка команд бота...")
+    await create_db()
     await bot.set_my_commands(commands=BOT_COMMANDS)
-    # Регистрация команд в интерфейсе
 
+    try:
+        bot.redis = await connect_redis()
+        logger.info("Redis connected successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect Redis: {e}")
+        bot.redis = None
 
 async def on_shutdown() -> None:
-    """Действия при завершении работы бота"""
-    logger.info("Очистка ресурсов...")
-    await dp.storage.close()  # Закрытие хранилища
-    await bot.session.close()  # Закрытие сессии бота
+    logger.info("Shutting down...")
 
+    if bot.redis:
+        await bot.redis.aclose()
+
+    await dp.storage.close()
+    await bot.session.close()
 
 async def main() -> None:
-    """Основная функция запуска бота"""
-    logger.info("Запуск бота...")
+    register_routers()
+    dp.update.middleware(DataBaseSession(session_pool=session_maker))
 
-    register_routers()  # Подключение обработчиков
-
-    # Регистрация обработчиков жизненного цикла
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    # Подключение middleware для работы с БД
-    dp.update.middleware(DataBaseSession(session_pool=session_maker))
-
     try:
-        # Очистка веб хуков и запуск long polling
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(
             bot,
-            allowed_updates=[
-                "message",
-                "callback_query",
-            ],  # Обрабатываемые типы обновлений
-            close_bot_session=False,  # Не закрываем сессию бота автоматически
+            allowed_updates=["message", "callback_query"],
+            close_bot_session=False
         )
     except asyncio.CancelledError:
-        logger.info("Запрос на остановку бота")
+        logger.info("Bot shutdown requested")
     except Exception as e:
-        logger.critical(f"Критическая ошибка: {e}", exc_info=True)
+        logger.critical(f"Critical error: {e}", exc_info=True)
+        if bot.admins:
+            await asyncio.gather(*[
+                bot.send_message(admin_id, f"🚨 Bot crashed: {e}")
+                for admin_id in bot.admins
+            ])
     finally:
-        await on_shutdown()  # Гарантированная очистка ресурсов
-
+        await on_shutdown()
 
 if __name__ == "__main__":
+    if not settings.BOT_TOKEN:
+        raise ValueError("BOT_TOKEN is required!")
+
     try:
-        # Запуск асинхронного event loop
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Получено прерывание с клавиатуры")
+        logger.info("Keyboard interrupt received")

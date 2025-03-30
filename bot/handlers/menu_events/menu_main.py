@@ -9,6 +9,7 @@ from database.orm_querys.orm_query_banner import orm_get_banner
 from keyboards.inline_main import get_user_main_btn
 
 
+# Создает контент главного меню с баннером и клавиатурой
 async def main_menu(
         session: AsyncSession,
         level: int,

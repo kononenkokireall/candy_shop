@@ -57,6 +57,9 @@ async def carts(
 
     # Получаем содержимое корзины и преобразуем в list
     raw_carts = await orm_get_user_carts(session, user_id)
+    if raw_carts is None:
+        raw_carts = []
+
     carts_user: list[Cart] = list(raw_carts)
 
     if not carts_user:
