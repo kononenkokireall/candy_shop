@@ -35,6 +35,9 @@ TOKEN_FILE.txt
 *.log
 *.sqlite3
 debug.log
+# Кеш-логи
+cache.log
+
 
 # Пакеты и зависимости
 pip-log.txt

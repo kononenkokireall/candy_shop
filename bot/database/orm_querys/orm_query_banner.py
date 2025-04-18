@@ -36,14 +36,9 @@ async def orm_add_banner_description(
     logger.info("Проверка существования баннеров в базе")
     try:
         # Формируем запрос для получения всех записей из таблицы Banner
-        query = select(Banner)
-        result = await session.execute(query)
-
-        # Если хотя бы одна запись существует,
-        # дальнейшее добавление не требуется.
+        result = await session.execute(select(Banner))
         if result.first():
-            logger.info("Баннеры уже существуют,"
-                        " добавление новых не требуется")
+            logger.info("Баннеры уже существуют, добавление не требуется")
             return
 
         logger.info(f"Добавление {len(data)} новых баннеров")
@@ -53,11 +48,16 @@ async def orm_add_banner_description(
             for name, description in data.items()
         ]
         # Добавляем созданные объекты в сессию.
-        session.add_all(banners)
-
-        await CacheInvalidator.invalidate_by_pattern("banners:*")
-        await CacheInvalidator.invalidate_by_pattern("banner:*")
-
+        async with session.begin():
+            session.add_all(banners)
+            # Инвалидация по каждому ключу
+            for name in data.keys():
+                await CacheInvalidator.invalidate([
+                    f"banner:{name}",
+                    f"banners:{name}",
+                    f"menu:*{name}*"
+                ])
+            await CacheInvalidator.invalidate(["banners:all"])
         logger.info("Баннеры успешно добавлены")
     except Exception as e:
         # Логируем исключение,
@@ -106,7 +106,6 @@ async def orm_change_banner_image(
             await CacheInvalidator.invalidate([
                 f"banner:{name}",
                 "banners:all",
-                "banners:info_pages",
                 f"banners:{name}",
                 f"menu:*{name}*",
                 f"menu:*page={name}*"
@@ -127,7 +126,7 @@ async def orm_change_banner_image(
 
 
 # Функция возвращает баннер для указанной страницы.
-@cached("banner:{page}", ttl=BANNER_TTL)
+@cached("banner:{page}", ttl=BANNER_TTL, defaults={"page": "all"}, model=Banner)
 async def orm_get_banner(
         session: AsyncSession,
         page: str) \
@@ -165,7 +164,7 @@ async def orm_get_banner(
         raise
 
 
-@cached("banners:all", ttl=BANNER_TTL)
+@cached("banners:all", ttl=BANNER_TTL, model=Banner)
 # Функция возвращает список информационных баннеров.
 async def orm_get_info_pages(
         session: AsyncSession,

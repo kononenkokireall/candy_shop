@@ -56,7 +56,9 @@ class Banner(Base):
             "name": self.name,
             "description": self.description,
             "image": self.image,
-            "admin_link": self.admin_link
+            "admin_link": self.admin_link,
+            "created": self.created.isoformat(),
+            "updated": self.updated.isoformat()
         }
 
 
@@ -80,6 +82,8 @@ class Category(Base):
         return {
             "id": self.id,
             "name": self.name,
+            "created": self.created.isoformat(),
+            "updated": self.updated.isoformat()
         }
 
 
@@ -116,20 +120,24 @@ class Product(Base):
     # Связь с записями корзины, содержащими данный товар.
     carts: Mapped[list["Cart"]] = relationship(back_populates="product")
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "price": float(self.price),
+            "image": self.image,
+            "category_id": self.category_id,
+            "created": self.created.isoformat(),
+            "updated": self.updated.isoformat()
+        }
+
 
 # Модель User представляет таблицу "user".
 class User(Base):
     __tablename__ = "user"
     # Индекс по полю user_id для ускорения поиска пользователей.
     __table_args__ = (Index("ix_user_user_id", "user_id"),)
-
-    # Добавить явное определение created/updated
-    created: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
 
     # Telegram User ID, используется как первичный ключ.
     user_id: Mapped[int] = mapped_column(
@@ -153,6 +161,16 @@ class User(Base):
     )
     # Связь с записями корзины, принадлежащими пользователю.
     carts: Mapped[list["Cart"]] = relationship(back_populates="user")
+
+    def to_dict(self):
+        return {
+            "user_id": self.user_id,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "phone": self.phone,
+            "created": self.created.isoformat(),
+            "updated": self.updated.isoformat()
+        }
 
 
 # Модель Cart представляет таблицу "cart" – записи корзины.
@@ -189,6 +207,16 @@ class Cart(Base):
     # Определение связи с товаром.
     product: Mapped["Product"] = relationship(back_populates="carts")
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "product_id": self.product_id,
+            "quantity": self.quantity,
+            "created": self.created.isoformat(),
+            "updated": self.updated.isoformat()
+        }
+
 
 # Модель Order представляет таблицу "orders" – заказы пользователей.
 class Order(Base):
@@ -221,15 +249,16 @@ class Order(Base):
         back_populates="order", cascade="all, delete-orphan",
         passive_deletes=True
     )
+
     def to_dict(self):
         return {
             "id": self.id,
             "user_id": self.user_id,
             "status": self.status,
             "items": [item.to_dict() for item in self.items],
-            "created": self.created.isoformat()
+            "created": self.created.isoformat(),
+            "updated": self.updated.isoformat()
         }
-
 
 
 # Модель OrderItem представляет

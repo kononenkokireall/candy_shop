@@ -14,12 +14,10 @@ from sqlalchemy.orm import selectinload
 from cache.decorators import cached
 from cache.invalidator import CacheInvalidator
 # Импорт моделей, используемых в запросах
-from database.models import Product, Category
+from database.models import Product, Category, Cart
 
 # Настройка логгера для модуля
 logger = logging.getLogger(__name__)
-
-PRODUCT_TTL = 3600  # 1 час
 
 
 # Функция Создает новый товар в базе данных с полной валидацией данных.
@@ -85,7 +83,7 @@ async def orm_add_product(
             # сгенерированный ID товара до коммит
             await session.flush()
             logger.info(f"Товар {product.id} создан: {product.name}")
-            await CacheInvalidator.invalidate_by_pattern("products:*")
+            # await CacheInvalidator.invalidate_by_pattern("products:*")
             return product
 
     except exc.SQLAlchemyError as e:
@@ -101,7 +99,7 @@ async def orm_add_product(
 
 # Функция Получает список товаров определенной категории с поддержкой пагинации.
 @cached("products:category:{category_id}:limit:{limit}:offset:{offset}",
-        ttl=PRODUCT_TTL)
+        ttl=3600, model=Product)
 async def orm_get_products(
         session: AsyncSession,
         category_id: int,
@@ -138,7 +136,7 @@ async def orm_get_products(
 
 
 # Функция Получает полную информацию о товаре по его ID.
-@cached("product:{product_id}", ttl=PRODUCT_TTL)
+@cached("product:{product_id}", ttl=3600, model=Product)
 async def orm_get_product(
         session: AsyncSession,
         product_id: int
@@ -244,6 +242,7 @@ async def orm_update_product(
                 f"product:{product_id}",
                 "products:*"
             ])
+            await _invalidate_carts_with_product(session, product_id)
             # Если возвращается ID обновленного товара, операция успешна
             return bool(result.scalar_one_or_none())
 
@@ -282,8 +281,39 @@ async def orm_delete_product(
                 f"product:{product_id}",
                 "products:*"
             ])
+            await _invalidate_carts_with_product(session, product_id)
             return bool(result.scalar_one_or_none())
 
     except exc.SQLAlchemyError as e:
         logger.error(f"Ошибка удаления товара {product_id}: {str(e)}")
         raise RuntimeError("Ошибка удаления товара") from e
+
+
+async def _invalidate_carts_with_product(
+        session: AsyncSession,
+        product_id: int
+) -> None:
+    """
+    Инвалидирует корзины всех пользователей, у которых есть данный товар.
+
+    Параметры:
+      - session: Асинхронная сессия БД.
+      - product_id: ID товара.
+    """
+    logger.info(f"Инвалидация корзин с товаром {product_id}")
+    try:
+        result = await session.execute(
+            select(Cart.user_id)
+            .where(Cart.product_id == product_id)
+            .distinct()
+        )
+        user_ids = [row[0] for row in result.all()]
+        if user_ids:
+            logger.info(f"Найдены пользователи для инвалидации: {user_ids}")
+            await CacheInvalidator.invalidate([
+                f"cart:{user_id}" for user_id in user_ids
+            ])
+        else:
+            logger.info(f"Нет пользователей с товаром {product_id}")
+    except Exception as e:
+        logger.warning(f"Ошибка инвалидации корзин: {str(e)}")

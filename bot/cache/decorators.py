@@ -1,11 +1,12 @@
-from collections import defaultdict
-from datetime import datetime
-from decimal import Decimal
-from functools import wraps
-from typing import Any, Callable, Coroutine, Union, Dict, List
+import datetime
+import decimal
+import functools
+import logging
+from typing import Any, Callable, Union, Dict, List, Optional, Type
 
 import orjson
-import logging
+from sqlalchemy.orm import InstrumentedAttribute
+
 from cache.redis import redis_cache
 
 logger = logging.getLogger(__name__)
@@ -15,113 +16,160 @@ logging.basicConfig(
     force=True,
 )
 
+# Специальный логгер для кэша
+cache_logger = logging.getLogger("cache")
+cache_logger.setLevel(logging.DEBUG)
+file_handler = logging.FileHandler("cache.log", mode="a", encoding="utf-8")
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(levelname)s - %(message)s"
+))
+cache_logger.addHandler(file_handler)
+
 
 def model_to_dict(obj: Any) -> Union[Dict, List]:
-    """Рекурсивно конвертирует ORM-объекты в словари с обработкой datetime"""
     if isinstance(obj, list):
         return [model_to_dict(item) for item in obj]
 
     if hasattr(obj, '__table__'):
         result = {}
+        # Сериализуем только колонки таблицы
         for column in obj.__table__.columns:
             value = getattr(obj, column.name)
-
-            # Автоматическая обработка datetime и Decimal
-            if isinstance(value, datetime):
-                value = value.isoformat()
-            elif isinstance(value, Decimal):
+            if isinstance(value, decimal.Decimal):
                 value = float(value)
-            elif hasattr(value, '__table__'):
-                value = model_to_dict(value)  # Рекурсия для связанных объектов
-
+            elif isinstance(value, (datetime.datetime, datetime.date)):
+                value = value.isoformat()
             result[column.name] = value
+
+        # Обрабатываем только загруженные отношения
+        if hasattr(obj, '__dict__'):
+            for attr_name, value in obj.__dict__.items():
+                if isinstance(value, list):
+                    # Если это список загруженных связанных объектов
+                    result[attr_name] = [model_to_dict(i) for i in value if
+                                         hasattr(i, '__table__')]
+                elif hasattr(value, '__table__'):
+                    result[attr_name] = model_to_dict(value)
+
         return result
+
     return obj
 
 
-def dict_to_model(data: Union[Dict, List]) -> Any:
-    """Конвертация словаря в объект-заглушку с восстановлением datetime"""
+def dict_to_model(data: Union[Dict, List], model: Any) -> Any:
     if isinstance(data, list):
-        return [dict_to_model(item) for item in data]
+        return [dict_to_model(item, model) for item in data]
 
-    class DynamicObject:
-        def __init__(self, data: dict):
-            for key, value in data.items():
-                if isinstance(value, dict):
-                    setattr(self, key, dict_to_model(value))
-                elif isinstance(value,
-                                str):  # Восстанавливаем datetime из строки
-                    try:
-                        setattr(self, key, datetime.fromisoformat(value))
-                    except (ValueError, TypeError):
-                        setattr(self, key, value)
-                else:
-                    setattr(self, key, value)
+    obj = model()
+    for key, value in data.items():
+        if isinstance(value, dict):
+            attr = getattr(model, key, None)
+            if isinstance(attr, InstrumentedAttribute) and hasattr(
+                    attr.property, "mapper"):
+                related_model = attr.property.mapper.class_
+                setattr(obj, key, dict_to_model(value, related_model))
+        elif isinstance(value, list) and hasattr(getattr(model, key, None),
+                                                 'property'):
+            attr = getattr(model, key).property
+            if hasattr(attr, "mapper"):
+                related_model = attr.mapper.class_
+                setattr(obj, key,
+                        [dict_to_model(i, related_model) for i in value])
+        else:
+            setattr(obj, key, value)
+    return obj
 
-    return DynamicObject(data)
 
+def cached(
+        key_template: str,
+        ttl: int = 3600,
+        model: Optional[Type] = None,
+        defaults: Optional[Dict] = None,
+        cache_empty_results: bool = False,
+        empty_ttl: int = 60,
+) -> Callable:
+    """
+    Кэширование результата асинхронной функции с использованием Redis.
+    key_template: шаблон ключа, поддерживает переменные как в f-строках,
+    например: "cart:{user_id}"
+    ttl: время жизни кэша в секундах
+    model: модель SQLAlchemy (для сериализации и десериализации)
+    cache_empty_results: кэшировать ли пустой результат (например, [])
+    empty_ttl: TTL для пустых результатов
+    """
 
-def cached(key_template: str, ttl: int = 3600) -> Callable:
-    def decorator(func: Callable[..., Coroutine[Any, Any, Any]]) -> Callable:
-        @wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:
-            cache_key = None
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if kwargs.pop("_bypass_cache", False):
+                cache_logger.debug(
+                    f"[Cache BYPASS] key_template={key_template} kwargs={kwargs}")
+                return await func(*args, **kwargs)
+
             try:
-                # Генерация ключа (ваша оригинальная логика)
-                format_kwargs = defaultdict(str, {
-                    'user_id': kwargs.get("user_id") or (
-                        args[1] if len(args) > 1 else None),
-                    'product_id': kwargs.get("product_id") or (
-                        args[2] if len(args) > 2 else None),
-                    'category_id': kwargs.get("category_id") or (
-                        args[3] if len(args) > 3 else None),
-                    'page': kwargs.get("page") or (
-                        args[4] if len(args) > 4 else None)
-                })
-                # Проверка обязательных параметров
-                if not format_kwargs['page']:
-                    logger.warning("Попытка кеширования с page=None")
-                    return await func(*args,
-                                      **kwargs)  # Пропускаем кеширование
-
-                cache_key = key_template.format_map(format_kwargs).replace(
-                    "::", ":")
-
+                key = key_template.format(**kwargs)
                 async with redis_cache.session() as redis:
-                    # Проверка кеша
-                    if cached_data := await redis.get(cache_key):
-                        if cached_data == b'null':  # Сохраненный None
-                            return None
-                        return dict_to_model(orjson.loads(cached_data))
-
-                    # Выполнение запроса, если нет в кеше
-                    result = await func(*args, **kwargs)
-
-                    logger.debug(f"Cache KEY: {cache_key}")
+                    cached_data = await redis.get(key)
                     if cached_data:
-                        logger.debug(f"Cache HIT: {cache_key}")
-                    else:
-                        logger.debug(f"Cache MISS: {cache_key}")
+                        cache_logger.debug(f"[Cache HIT] key={key}")
+                        if model:
+                            data = orjson.loads(cached_data)
+                            if isinstance(data, list):
+                                return [model(**item) for item in data]
+                            return model(**data)
+                        return orjson.loads(cached_data)
 
-                    # Сериализация и сохранение
-                    if result is None:
-                        await redis.setex(cache_key, ttl, b'null')
-                    else:
-                        await redis.setex(
-                            cache_key,
-                            ttl,
-                            orjson.dumps(
-                                model_to_dict(result),
-                                option=orjson.OPT_NAIVE_UTC
-                                # Автоконвертация datetime в UTC
-                            )
-                        )
-                    return result
+                result = await func(*args, **kwargs)
 
+                if result or cache_empty_results:
+                    data_to_cache = (
+                        orjson.dumps([model_to_dict(obj) for obj in result])
+                        if isinstance(result, list)
+                        else orjson.dumps(model_to_dict(result))
+                    )
+                    ttl_to_use = ttl if result else empty_ttl
+                    async with redis_cache.session() as redis:
+                        await redis.setex(key, ttl_to_use, data_to_cache)
+                    cache_logger.debug(
+                        f"[Cache SET] key={key} ttl={ttl_to_use}")
+
+                return result
             except Exception as e:
-                logger.error(f"Cache error: {str(e)}", exc_info=True)
+                cache_logger.error(
+                    f"[Cache ERROR] key={key_template} error={e}")
                 return await func(*args, **kwargs)
 
         return wrapper
 
     return decorator
+
+
+async def set_cache(
+        key: str,
+        data: Any,
+        ttl: int = 60,
+        model: Optional[Type] = None
+):
+    """
+    Прямое сохранение значения в кэш Redis.
+    key — строка ключа, например: "cart:123"
+    data — данные (модель или список моделей SQLAlchemy)
+    ttl — время жизни
+    model — модель, которую использовать для сериализации
+    """
+    try:
+        if data is None:
+            return
+
+        serialized = (
+            b"null" if data is None
+            else orjson.dumps([
+                                  model_to_dict(obj) for obj in data
+                              ] if isinstance(data, list) else model_to_dict(
+                data))
+        )
+        async with redis_cache.session() as redis:
+            await redis.setex(key, ttl, serialized)
+        cache_logger.debug(f"[CACHE SET] key={key}, ttl={ttl}")
+    except Exception as e:
+        cache_logger.error(f"[CACHE ERROR] Failed to set: {e}")

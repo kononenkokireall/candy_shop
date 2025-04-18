@@ -62,7 +62,6 @@ async def orm_add_user(
         async with session.begin():
             result = await session.execute(upsert_stmt)
             row = result.first()
-
             if row:
                 is_new = row.created == row.updated
                 result_info.update(

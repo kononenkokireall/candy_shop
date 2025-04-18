@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Optional
 
@@ -41,7 +40,7 @@ async def start_cmd(message: types.Message, session: AsyncSession) -> None:
         media, reply_markup = await get_menu_content(session, level=0,
                                                      menu_name="main",
                                                      user_id=user_id,
-                                                     product_id=42)
+                                                     )
 
         # Проверяем, что полученные значения корректны
         if media is None or reply_markup is None:
@@ -67,7 +66,7 @@ async def start_cmd(message: types.Message, session: AsyncSession) -> None:
 # Показывает справку по использованию бота.
 @user_private_router.message(Command("help"))
 async def help_cmd(message: types.Message) -> None:
-    help_text = """
+    """
     Отправляет пользователю информацию о том, как пользоваться ботом-магазином.
     """
     help_text = (

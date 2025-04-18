@@ -132,7 +132,7 @@ async def orm_create_order(
 
 
 # Функция Получает список заказов пользователя с поддержкой пагинации.
-@cached("orders:user:{user_id}", ttl=ORDER_TTL)
+@cached("orders:user:{user_id}", ttl=ORDER_TTL, model=Order)
 async def orm_get_user_orders(
         session: AsyncSession,
         user_id: int,
@@ -178,7 +178,7 @@ async def orm_get_user_orders(
 
 # Функция Получает полную информацию о заказе,
 # включая позиции и связанные данные о товарах.
-@cached("order:{order_id}", ttl=ORDER_TTL)
+@cached("order:{order_id}", ttl=ORDER_TTL, model=Order)
 async def orm_get_order_details(
         session: AsyncSession,
         order_id: int

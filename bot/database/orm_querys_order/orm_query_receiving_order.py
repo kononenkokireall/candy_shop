@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 ORDER_TTL = 900  # 15 минут
 
 # Функция Получает список заказов пользователя с пагинацией
-@cached("orders:user:{user_id}", ttl=ORDER_TTL)
+@cached("orders:user:{user_id}", ttl=ORDER_TTL, model=Order)
 async def orm_get_user_orders(
         session: AsyncSession,
         user_id: int,
