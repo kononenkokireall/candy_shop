@@ -4,7 +4,6 @@ from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cache.invalidator import CacheInvalidator
 from database.models import Order
 
 logger = logging.getLogger(__name__)
@@ -38,29 +37,25 @@ async def orm_update_order_status(
                 f" на '{new_status}'")
 
     try:
-        # Проверяем существование заказа перед обновлением
-        async with session.begin():
-            # Выполняем обновление и проверку в одной транзакции
-            update_stmt = (
-                update(Order)
-                .where(Order.id == order_id)
-                .values(status=new_status)
-                .returning(Order.id)
-            )
+        # Выполняем обновление и проверку
+        update_stmt = (
+            update(Order)
+            .where(Order.id == order_id)
+            .values(status=new_status)
+            .returning(Order.id)
+        )
 
-            result = await session.execute(update_stmt)
-            updated_order = result.scalar_one_or_none()
+        result = await session.execute(update_stmt)
+        updated_order = result.scalar_one_or_none()
 
-            if updated_order:
-                await CacheInvalidator.invalidate([
-                    f"order:{order_id}"
-                ])
-                logger.info(f"Статус заказа {order_id}"
-                            f" успешно изменен на {new_status}")
-                return True
+        if updated_order:
+            logger.info(f"Статус заказа {order_id}"
+                        f" успешно изменен на {new_status}")
+            await session.commit()
+            return True
 
-            logger.warning(f"Заказ {order_id} не найден")
-            return False
+        logger.warning(f"Заказ {order_id} не найден")
+        return False
 
     except SQLAlchemyError as e:
         logger.error(

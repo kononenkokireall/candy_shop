@@ -12,7 +12,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, User as TgUser
 from redis.asyncio import Redis
 
-from database.engine import session_maker, create_db
+from database.engine import session_maker, create_db, drop_db
 from handlers.admin_events.admin_main import admin_router
 from handlers.user_events.user_group import user_group_router
 from handlers.user_events.user_main import user_private_router
@@ -26,6 +26,7 @@ logging.basicConfig(
     force=True,
 )
 logging.getLogger("aiogram").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 
 BOT_COMMANDS: Final[List[BotCommand]] = [
     BotCommand(command="start", description="Старт"),
@@ -64,6 +65,7 @@ async def on_startup() -> None:
     logger.info("Starting bot version 1.1.0")
     logger.info(f"Environment: {settings.MODE}")
 
+    #await drop_db()
     await create_db()
     await bot.set_my_commands(commands=BOT_COMMANDS)
 
@@ -114,6 +116,6 @@ if __name__ == "__main__":
         raise ValueError("BOT_TOKEN is required!")
 
     try:
-        asyncio.run(main())
+        asyncio.run(main(), debug=True)
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")

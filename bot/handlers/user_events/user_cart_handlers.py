@@ -8,7 +8,7 @@ from aiogram.types import Message, InputMediaPhoto, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.orm_querys.orm_query_cart import orm_reduce_product_in_cart, \
-    orm_full_remove_from_cart
+    orm_full_remove_from_cart, orm_add_product_to_cart
 from handlers.menu_events.menu_process_cart import carts
 from handlers.user_events.user_main import user_private_router
 from keyboards.inline_main import MenuCallBack
@@ -42,6 +42,33 @@ async def decrement_product(
         await callback.answer("Минимальное количество: 1 шт")
 
     await callback.answer()
+
+
+# Увеличивает количество товара в корзине на 1 единицу.
+@user_private_router.callback_query(
+    MenuCallBack.filter(F.menu_name == "increment"))
+async def increment_product(
+        callback: CallbackQuery,
+        callback_data: MenuCallBack,
+        session: AsyncSession
+) -> None:
+    if not callback_data.product_id:
+        await callback.answer("Ошибка товара!")
+        return
+
+    changed = await orm_add_product_to_cart(  # эта функция должна увеличивать qty на 1
+        session=session,
+        user_id=callback.from_user.id,
+        product_id=callback_data.product_id
+    )
+
+    if changed and callback.message:
+        await update_cart_message(callback.message, session)
+    else:
+        await callback.answer("Не удалось увеличить количество")
+
+    await callback.answer()
+
 
 
 # Полностью удаляет товар из корзины пользователя.

@@ -42,7 +42,7 @@ def get_user_catalog_btn(
     # с уменьшенным уровнем и именем меню 'main'.
     keyboard.add(
         InlineKeyboardButton(
-            text="◀️Вернутся",
+            text="◀️Вернуться",
             callback_data=MenuCallBack(level=level - 1,
                                        menu_name="main").pack(),
         )

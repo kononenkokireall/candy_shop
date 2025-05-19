@@ -1,70 +1,87 @@
 import logging
+from typing import Sequence
 
-from typing import Optional
+from sqlalchemy import exc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy import exc, select
 
-
-from cache.decorators import cached
-from database.models import Order, OrderItem
+from database.models import Order
 
 logger = logging.getLogger(__name__)
 
-ORDER_TTL = 900  # 15 минут
 
-# Функция Получает полную информацию о заказе с детализацией товаров
-@cached("order:{order_id}", ttl=ORDER_TTL)
-async def orm_get_order_details(
-        session: AsyncSession, order_id: int
-) -> Optional[Order]:
+# Функция Получает список заказов пользователя с пагинацией
+async def orm_get_user_orders(
+        session: AsyncSession,
+        user_id: int,
+        limit: int = 100,
+        offset: int = 0
+) -> Sequence[Order]:
     """
-    Получает полную информацию о заказе с детализацией товаров
+    Получает список заказов пользователя с пагинацией
 
     Параметры:
-        session: Асинхронная сессия БД
-        order_id: Идентификатор заказа
+        session (AsyncSession): Асинхронная сессия БД
+        user_id (int): Идентификатор пользователя
+        limit (int): Максимальное количество заказов (по умолчанию 100)
+        offset (int): Смещение выборки (по умолчанию 0)
 
     Возвращает:
-        Optional[Order]: Объект заказа с пред_загруженными:
-            - items (список товаров)
-            - product (информация о товаре для каждой позиции)
-        None если заказ не найден
+        List[Order]: Список заказов с пред_загруженными позициями
+        Пустой список если заказов не найдено
 
     Исключения:
+        ValueError: При некорректном user_id
         SQLAlchemyError: При ошибках выполнения запроса
     """
-    logger.info(f"Запрос деталей заказа {order_id}")
+    logger.info(
+        f"Запрос заказов пользователя {user_id} [limit={limit},"
+        f" offset={offset}]"
+    )
 
     try:
-        # Используем deselection для оптимизации загрузки связанных данных
+        # Валидация входных параметров
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError("Некорректный идентификатор пользователя")
+
+        if limit < 1 or limit > 1000:
+            raise ValueError("Лимит должен быть в диапазоне 1-1000")
+
+        # Формирование запроса
         query = (
             select(Order)
-            .where(Order.id == order_id)
+            .where(Order.user_id == user_id)
             .options(
-                selectinload(Order.items).joinedload(
-                    OrderItem.product
-                )  # Для загрузки продукта
+                # Более эффективная загрузка для коллекций
+                selectinload(Order.items)
             )
-            .execution_options(populate_existing=True)
+            .order_by(Order.created.desc())
+            .limit(limit)
+            .offset(offset)
         )
 
+        # Выполнение запроса
         result = await session.execute(query)
-        order = result.scalars().unique().one_or_none()
+        orders = result.scalars().all()
 
-        if order:
-            logger.debug(
-                f"Успешно получен заказ {order_id}"
-                f" с {len(order.items)} позициями"
-            )
+        # Логирование результатов
+        if orders:
+            logger.debug(f"Найдено {len(orders)} заказов для пользователя"
+                         f" {user_id}")
         else:
-            logger.warning(f"Заказ {order_id} не найден в базе данных")
+            logger.info(f"Заказы для пользователя {user_id} не найдены")
 
-        return order.to_dict() if order else None
+        return orders
 
     except exc.SQLAlchemyError as e:
-        logger.error(f"Ошибка БД при получении заказа {order_id}: {str(e)}")
+        await session.rollback()
+        logger.error(f"Ошибка БД при получении заказов: {str(e)}",
+                     exc_info=True)
+        raise
+    except ValueError as e:
+        logger.warning(f"Некорректные параметры запроса: {str(e)}")
         raise
     except Exception as e:
-        logger.exception(f"Неожиданная ошибка при обработке заказа {order_id}")
-        raise RuntimeError("Ошибка получения данных") from e
+        logger.exception("Неожиданная ошибка при обработке запроса")
+        await session.rollback()
+        raise RuntimeError("Ошибка получения заказов") from e

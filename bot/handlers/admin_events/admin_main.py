@@ -141,11 +141,18 @@ async def admin_features(
 ) -> None:
     # Получаем категории из базы данных
     categories = await orm_get_categories(session)
-    # Генерируем кнопки с категориями
-    btn = {category["name"]: f'category_{category["id"]}'
-           for category in categories if category["name"] is not None}
-    await message.answer("Выберите категорию",
-                         reply_markup=get_callback_btn(btn=btn))
+
+    # Генерируем кнопки с категориями (исправлено обращение к атрибутам)
+    btn = {
+        category.name: f'category_{category.id}'
+        for category in categories
+        if category.name is not None  # Проверка на наличие названия
+    }
+
+    await message.answer(
+        "Выберите категорию",
+        reply_markup=get_callback_btn(btn=btn)
+    )
 
 
 # Handler для отправки перечня информационных
@@ -270,7 +277,10 @@ async def add_description(
 
     # Генерация кнопок с категориями
     categories = await orm_get_categories(session)
-    btn = {category["name"]: str(category["id"]) for category in categories}
+    btn = {
+        category.name: str(category.id)  # Исправлен доступ к атрибутам
+        for category in categories
+    }
     # Переход к выбору категории
     await message.answer("Выберите категорию",
                          reply_markup=get_callback_btn(btn=btn))
@@ -328,29 +338,27 @@ async def category_choice(
         state: FSMContext,
         session: AsyncSession
 ) -> None:
+    # Проверка наличия данных и их типа
     if callback.data is None or not callback.data.isdigit():
-        # Проверка данных
         await callback.answer("❌ Некорректные данные")
         return
 
-    if int(callback.data) in [category["id"] for category in
-                              await orm_get_categories(
-                                  session)]:
-        # Проверяем валидность выбранной категории
-        await callback.answer()
-        # Подтверждаем выбор
-        await state.update_data(
-            category=callback.data)
-        # Сохраняем выбранную категорию в данные FSM
-        await callback.message.answer(
-            'Теперь введите цену товара.')
-        # Переходим к следующему шагу
+    # Получаем список существующих категорий
+    categories = await orm_get_categories(session)
+
+    # Преобразуем ID категорий в целые числа
+    valid_category_ids = {category.id for category in categories}
+
+    # Проверяем валидность выбранной категории
+    if int(callback.data) in valid_category_ids:
+        await callback.answer()  # Подтверждаем выбор
+        await state.update_data(category=callback.data)  # Сохраняем категорию
+
+        await callback.message.answer('Теперь введите цену товара.')
         await state.set_state(OrderProcess.PRICE)
     else:
-        await callback.message.answer(
-            'Выберите категорию из кнопок.')
-        # Сообщение об ошибке
-        await callback.answer()
+        await callback.message.answer('Выберите категорию из кнопок.')
+        await callback.answer()  # Отправляем пустой ответ для закрытия всплывашки
 
 
 # Handler для некорректного ввода на шаге CATEGORY
@@ -566,42 +574,42 @@ async def confirm_order_handler(
         order_id = callback_data.order_id
 
         # Получение заказа с блокировкой для предотвращения race condition
-        async with session.begin():
-            order: Optional[Order] = await session.get(Order, order_id,
-                                                       with_for_update=True)
-            if not order:
-                await callback.answer("🚨 Заказ не найден",
-                                      show_alert=True)
-                return
+        # async with session.begin():
+        order: Optional[Order] = await session.get(Order, order_id,
+                                                   with_for_update=True)
+        if not order:
+            await callback.answer("🚨 Заказ не найден",
+                                  show_alert=True)
+            return
 
-            if order.status == "confirmed":
-                await callback.answer("ℹ️ Заказ уже подтвержден")
-                return
+        if order.status == "confirmed":
+            await callback.answer("ℹ️ Заказ уже подтвержден")
+            return
 
-            # Обновление статуса заказа
-            order.status = "confirmed"
-            await session.commit()
+        # Обновление статуса заказа
+        order.status = "confirmed"
+        await session.commit()
 
-            # Отправка уведомления пользователю
-            try:
-                await callback.bot.send_message(
-                    chat_id=str(order.user_id),
-                    text=(
-                        "🎉 <b>Ваш заказ подтвержден!</b>\n\n"
-                        "✅ Оплата прошла успешно\n"
-                        "📦 Забрать можно по адресу: ул. Примерная, 123"
-                    ),
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Ошибка отправки уведомления: {e}")
+        # Отправка уведомления пользователю
+        try:
+            await callback.bot.send_message(
+                chat_id=str(order.user_id),
+                text=(
+                    "🎉 <b>Ваш заказ подтвержден!</b>\n\n"
+                    "✅ Оплата прошла успешно\n"
+                    "📦 Забрать можно по адресу: ул. Примерная, 123"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления: {e}")
 
-            await callback.answer("✅ Заказ подтвержден")
+        await callback.answer("✅ Заказ подтвержден")
 
     except Exception as e:
         logger.error(f"Ошибка подтверждения: {e}", exc_info=True)
-        await session.rollback()
-        await callback.answer("🚨 Ошибка подтверждения заказа", show_alert=True)
+    await session.rollback()
+    await callback.answer("🚨 Ошибка подтверждения заказа", show_alert=True)
 
 
 # Обработчик callback-запроса для отмены заказа.
@@ -647,47 +655,47 @@ async def cancel_order_handler(
             await callback.answer("❌ Ошибка системы", show_alert=True)
             return
 
-        # Используем контекстный менеджер для транзакции
-        async with session.begin():
+            # Используем контекстный менеджер для транзакции
+            # async with session.begin():
             # Получаем заказ с блокировкой для
             # предотвращения конкурентного доступа
-            order = await session.get(
-                Order,
-                callback_data.order_id,
-                with_for_update=True  # Блокировка для конкурентного доступа
+        order = await session.get(
+            Order,
+            callback_data.order_id,
+            with_for_update=True  # Блокировка для конкурентного доступа
+        )
+
+        if not order:
+            await callback.answer("🚨 Заказ не найден",
+                                  show_alert=True)
+            return
+
+        if order.status == "cancelled":
+            await callback.answer("ℹ️ Заказ уже отменен")
+            return
+
+        # Обновляем статус заказа
+        order.status = "cancelled"
+        await session.commit()
+
+        # Отправка уведомления пользователю
+        try:
+            await callback.bot.send_message(
+                chat_id=str(order.user_id),
+                text=(
+                    "❌ <b>Заказ отменен</b>\n\n"
+                    "Администратор отменил ваш заказ. "
+                    "Для уточнения деталей свяжитесь с администратором."
+                ),
+                parse_mode="HTML"
             )
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления: {e}")
+            raise
 
-            if not order:
-                await callback.answer("🚨 Заказ не найден",
-                                      show_alert=True)
-                return
-
-            if order.status == "cancelled":
-                await callback.answer("ℹ️ Заказ уже отменен")
-                return
-
-            # Обновляем статус заказа
-            order.status = "cancelled"
-            await session.commit()
-
-            # Отправка уведомления пользователю
-            try:
-                await callback.bot.send_message(
-                    chat_id=str(order.user_id),
-                    text=(
-                        "❌ <b>Заказ отменен</b>\n\n"
-                        "Администратор отменил ваш заказ. "
-                        "Для уточнения деталей свяжитесь с администратором."
-                    ),
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Ошибка отправки уведомления: {e}")
-                raise
-
-            await callback.answer("❌ Заказ отменен")
+        await callback.answer("❌ Заказ отменен")
 
     except Exception as e:
         logger.error(f"Ошибка отмены: {e}", exc_info=True)
-        await session.rollback()
-        await callback.answer("🚨 Ошибка отмены заказа", show_alert=True)
+    await session.rollback()
+    await callback.answer("🚨 Ошибка отмены заказа", show_alert=True)

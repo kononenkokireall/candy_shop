@@ -7,7 +7,6 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import InputMediaPhoto
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cache.invalidator import CacheInvalidator
 from database.orm_querys.orm_query_cart import orm_add_to_cart
 from database.orm_querys.orm_query_user import orm_add_user
 from filters.chat_types import ChatTypeFilter
@@ -112,18 +111,29 @@ async def add_to_cart(callback: types.CallbackQuery,
                               show_alert=True)
         return
 
-    await orm_add_user(session, user_id=user_local.id,
-                       first_name=user_local.first_name,
-                       last_name=user_local.last_name or "", phone=None)
+    try:
+        # Управляем транзакцией внутри функции
+        # async with session.begin():
+        # Регистрируем или обновляем пользователя
+        await orm_add_user(session, user_id=user_local.id,
+                           first_name=user_local.first_name,
+                           last_name=user_local.last_name or "",
+                           phone=None)
 
-    if callback_data.product_id is not None:
-        await orm_add_to_cart(session, user_id=user_local.id,
-                              product_id=callback_data.product_id)
-        await callback.answer("Товар добавлен в корзину!")
-        await session.commit()
-    else:
-        await callback.answer("Ошибка: отсутствует идентификатор товара.",
-                              show_alert=True)
+        if callback_data.product_id is not None:
+            await orm_add_to_cart(session, user_id=user_local.id,
+                                  product_id=callback_data.product_id)
+            await callback.answer("Товар добавлен в корзину!")
+        else:
+            await callback.answer(
+                "Ошибка: отсутствует идентификатор товара.",
+                show_alert=True)
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении товара в корзину: {e}",
+                     exc_info=True)
+        await callback.answer(
+            "Произошла ошибка при добавлении товара в корзину.",
+            show_alert=True)
 
 
 # Главный обработчик callback-запросов для навигации по меню.
@@ -134,43 +144,26 @@ async def user_menu(
         session: AsyncSession,
         notification_service: Optional[NotificationService] = None
 ) -> None:
-    # Проверка наличия информации о пользователе
-    if callback.from_user is None:
+    user_id = callback.from_user.id if callback.from_user else None
+    if not user_id:
         logger.error("Callback не содержит информации о пользователе")
         await callback.answer("Ошибка авторизации", show_alert=True)
         return
 
-    # Инициализация сервиса уведомлений при необходимости
-    if notification_service is None:
-        notification_service = NotificationService(
-            bot=callback.bot,
-            admin_chat_id=settings.ADMIN_CHAT_ID
-        )
+    notification_service = notification_service or NotificationService(
+        bot=callback.bot,
+        admin_chat_id=settings.ADMIN_CHAT_ID
+    )
 
     try:
-        # Обработка специального случая для чек аута
+        # Обработка чек-аута
         if callback_data.menu_name == "checkout" and callback_data.level == 4:
-            media, keyboards = await checkout(
-                session,
-                callback.from_user.id,
-                notification_service
-            )
+            media, keyboards = await checkout(session, user_id,
+                                              notification_service)
 
-            # Проверяем тип и наличие сообщения
-            message = callback.message
-            if not isinstance(message, types.Message):
-                await callback.answer(
-                    "Ошибка: сообщение недоступно!",
-                    show_alert=True
-                )
-                return
-
-                # Проверяем наличие фото
-            if not message.photo:
-                await callback.answer(
-                    "Сообщение не содержит фото!",
-                    show_alert=True
-                )
+            if not callback.message:
+                await callback.answer("Ошибка: сообщение недоступно!",
+                                      show_alert=True)
                 return
 
             try:
@@ -189,51 +182,34 @@ async def user_menu(
         # Обработка добавления в корзину
         if callback_data.menu_name == "add_to_cart":
             await add_to_cart(callback, callback_data, session)
+            await callback.answer()
             return
 
-            # Инвалидация кеша для баннеров при их запросе
-        if callback_data.menu_name == "banner":
-            logger.debug(
-                f"Инвалидируем кеш для баннера: banner:{callback_data.page}")
-            await CacheInvalidator.invalidate([
-                f"banner:{callback_data.page}",
-                f"menu:*{callback_data.page}*"
-            ])
-
-        # Основная логика обработки меню --------------------------------------
-
-        # Получаем текущее состояние сообщения ПЕРЕД генерацией нового контента
-        current_message = callback.message
-        if not isinstance(current_message, types.Message):
-            await callback.answer(
-                "Ошибка: текущее сообщение недоступно!",
-                show_alert=True
-            )
+        # Основная логика меню
+        message = callback.message
+        if not message:
+            await callback.answer("Ошибка: сообщение недоступно!",
+                                  show_alert=True)
             return
 
-            # Извлекаем данные из сообщения
-        original_media = (current_message.photo[-1].file_id
-                          if current_message.photo
-                          else None
-                          )
-        original_reply_markup = current_message.reply_markup
+        current_photo_id = message.photo[-1].file_id if message.photo else None
+        current_markup = message.reply_markup
 
-        # Генерация нового контента
-        media, reply_markup = await get_menu_content(
+        media, new_markup = await get_menu_content(
             session,
             level=callback_data.level,
             menu_name=callback_data.menu_name,
             category=callback_data.category,
             page=callback_data.page,
-            user_id=callback.from_user.id,
+            user_id=user_id,
             product_id=callback_data.product_id
         )
 
-        # Валидация медиа
-        if media is None:
+        if not media:
             await callback.answer("Медиа не найдено.", show_alert=True)
             return
 
+        # Приведение строки к InputMediaPhoto
         if isinstance(media, str):
             media = InputMediaPhoto(media=media)
         elif not isinstance(media, InputMediaPhoto):
@@ -241,32 +217,21 @@ async def user_menu(
                                   show_alert=True)
             return
 
-            # Проверяем изменения
-        is_media_changed = (isinstance(media, InputMediaPhoto) and
-                            media.media != original_media
-                            )
-        is_markup_changed = str(reply_markup) != str(original_reply_markup)
+        # # Проверка изменений
+        # media_changed = media.media != current_photo_id
+        # markup_changed = str(new_markup) != str(current_markup)
+        #
+        # if not media_changed and not markup_changed:
+        #     await callback.answer("Сообщение уже актуально.", show_alert=True)
+        #     return
 
-        # Если ничего не изменилось - отправляем ответ и выходим
-        if not is_media_changed and not is_markup_changed:
-            await callback.answer("Сообщение уже актуально.",
-                                  show_alert=True)
-            return
-
-        # Попытка обновления сообщения
         try:
-
-            await callback.message.edit_media(
-                media=media,
-                reply_markup=reply_markup
-            )
+            await message.edit_media(media=media, reply_markup=new_markup)
         except TelegramBadRequest as e:
-            # Обработка конкретной ошибки "неизмененного сообщения"
             if "message is not modified" in str(e):
-                logger.warning(f"Игнорируем неизмененное сообщение: {e}")
-                await callback.answer()
+                logger.warning(f"Сообщение не изменено: {e}")
             else:
-                logger.error(f"Ошибка редактирования медиа: {e}",
+                logger.error(f"Ошибка при редактировании медиа: {e}",
                              exc_info=True)
                 await callback.answer("Ошибка обновления контента",
                                       show_alert=True)
@@ -274,7 +239,7 @@ async def user_menu(
             logger.error(f"Неожиданная ошибка: {e}", exc_info=True)
             await callback.answer("Произошла непредвиденная ошибка",
                                   show_alert=True)
-        finally:
+        else:
             await callback.answer()
 
     except Exception as e:

@@ -1,4 +1,4 @@
-categories_goods = ["Cannabis Lollipops", "Колпаки"]
+categories_goods = ["Cannabis Lollipops", "Колпаки "]
 description_for_info_pages = {
     "main": """
 👋 <b>Добро пожаловать в CBDS_Candies 🍭</b>

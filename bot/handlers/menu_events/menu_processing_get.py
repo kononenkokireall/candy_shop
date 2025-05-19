@@ -21,6 +21,7 @@ async def get_menu_content(
         product_id: int | None = None,
         user_id: int | None = None,
 ):
+
     if level == 0:
         return await main_menu(session, level, menu_name)
     elif level == 1:

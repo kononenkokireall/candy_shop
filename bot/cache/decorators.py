@@ -1,6 +1,7 @@
 import datetime
 import decimal
 import functools
+import inspect
 import logging
 from typing import Any, Callable, Union, Dict, List, Optional, Type
 
@@ -81,62 +82,74 @@ def dict_to_model(data: Union[Dict, List], model: Any) -> Any:
 
 
 def cached(
-        key_template: str,
-        ttl: int = 3600,
-        model: Optional[Type] = None,
-        defaults: Optional[Dict] = None,
-        cache_empty_results: bool = False,
-        empty_ttl: int = 60,
+    key_template: str,
+    ttl: int = 3600,
+    model: Optional[Type] = None,
+    defaults: Optional[Dict[str, Any]] = None,
+    cache_empty_results: bool = False,
+    empty_ttl: int = 60,
 ) -> Callable:
     """
-    Кэширование результата асинхронной функции с использованием Redis.
-    key_template: шаблон ключа, поддерживает переменные как в f-строках,
-    например: "cart:{user_id}"
-    ttl: время жизни кэша в секундах
-    model: модель SQLAlchemy (для сериализации и десериализации)
-    cache_empty_results: кэшировать ли пустой результат (например, [])
-    empty_ttl: TTL для пустых результатов
-    """
+    Кэширует результат асинхронной функции с Redis.
 
-    def decorator(func: Callable):
+    :param key_template: шаблон ключа Redis, например "cart:{user_id}"
+    :param ttl: TTL в секундах
+    :param model: SQLAlchemy модель (если нужно сериализовать обратно)
+    :param defaults: значения по умолчанию для подстановки в ключ
+    :param cache_empty_results: кэшировать ли пустые значения
+    :param empty_ttl: TTL для пустых значений
+    """
+    defaults = defaults or {}
+
+    def decorator(func: Callable[..., Any]):
+        sig = inspect.signature(func)
+
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             if kwargs.pop("_bypass_cache", False):
-                cache_logger.debug(
-                    f"[Cache BYPASS] key_template={key_template} kwargs={kwargs}")
+                cache_logger.debug(f"[Cache BYPASS] key_template={key_template}")
                 return await func(*args, **kwargs)
 
             try:
-                key = key_template.format(**kwargs)
+                # Получаем все аргументы в виде словаря
+                bound_args = sig.bind_partial(*args, **kwargs)
+                bound_args.apply_defaults()
+                full_kwargs = {**defaults, **bound_args.arguments}
+
+                # Подставляем в шаблон ключа
+                key = key_template.format(**full_kwargs)
+
                 async with redis_cache.session() as redis:
                     cached_data = await redis.get(key)
                     if cached_data:
                         cache_logger.debug(f"[Cache HIT] key={key}")
+                        data = orjson.loads(cached_data)
+                        if data is None:
+                            return None
                         if model:
-                            data = orjson.loads(cached_data)
                             if isinstance(data, list):
-                                return [model(**item) for item in data]
-                            return model(**data)
-                        return orjson.loads(cached_data)
+                                return [dict_to_model(item, model) for item in data]
+                            return dict_to_model(data, model)
+                        return data
 
+                # Получаем результат и кэшируем
                 result = await func(*args, **kwargs)
 
-                if result or cache_empty_results:
-                    data_to_cache = (
+                if result is not None and (result or cache_empty_results):
+                    serialized = (
                         orjson.dumps([model_to_dict(obj) for obj in result])
                         if isinstance(result, list)
                         else orjson.dumps(model_to_dict(result))
                     )
                     ttl_to_use = ttl if result else empty_ttl
                     async with redis_cache.session() as redis:
-                        await redis.setex(key, ttl_to_use, data_to_cache)
-                    cache_logger.debug(
-                        f"[Cache SET] key={key} ttl={ttl_to_use}")
+                        await redis.setex(key, ttl_to_use, serialized)
+                    cache_logger.debug(f"[Cache SET] key={key} ttl={ttl_to_use}")
 
                 return result
+
             except Exception as e:
-                cache_logger.error(
-                    f"[Cache ERROR] key={key_template} error={e}")
+                cache_logger.exception(f"[Cache ERROR] key_template={key_template} error={e}")
                 return await func(*args, **kwargs)
 
         return wrapper

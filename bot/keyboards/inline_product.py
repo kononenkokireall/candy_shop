@@ -48,7 +48,7 @@ def get_user_product_btn(
     # (используется переданный product_id)
     keyboard.add(
         InlineKeyboardButton(
-            text="◀️Вернутся",
+            text="◀️Вернуться",
             callback_data=MenuCallBack(level=level - 1,
                                        menu_name="catalog").pack(),
         ),

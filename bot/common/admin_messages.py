@@ -1,7 +1,8 @@
 import logging
 from typing import Tuple
 
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, \
+    InlineKeyboardButton
 from aiogram.utils.formatting import (
     Bold,
     as_list,
@@ -80,3 +81,4 @@ def format_order_notification(order: Order) -> Tuple[
                      exc_info=True)
         return ("Ошибка форматирования уведомления",
                 build_admin_keyboard(order.id))
+

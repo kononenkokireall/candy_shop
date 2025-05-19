@@ -48,11 +48,11 @@ async def orm_add_banner_description(
             for name, description in data.items()
         ]
         # Добавляем созданные объекты в сессию.
-        async with session.begin():
-            session.add_all(banners)
-            # Инвалидация по каждому ключу
-            for name in data.keys():
-                await CacheInvalidator.invalidate([
+        session.add_all(banners)
+        await session.commit()
+        # Инвалидация по каждому ключу
+        for name in data.keys():
+            await CacheInvalidator.invalidate([
                     f"banner:{name}",
                     f"banners:{name}",
                     f"menu:*{name}*"
@@ -87,7 +87,6 @@ async def orm_change_banner_image(
     """
     logger.info(f"Обновление изображения баннера '{name}'")
     try:
-        async with session.begin():  # Явное управление транзакцией
             # Формируем запрос на обновление
             update_query = (
                 update(Banner)
@@ -111,7 +110,7 @@ async def orm_change_banner_image(
                 f"menu:*page={name}*"
             ])
             await CacheInvalidator.invalidate_by_pattern(f"*{name}*")  # Важно!
-
+            await session.commit()
             logger.info(
                 f"Баннер '{name}' успешно обновлен. Кэш инвалидирован.")
 
@@ -126,12 +125,12 @@ async def orm_change_banner_image(
 
 
 # Функция возвращает баннер для указанной страницы.
-@cached("banner:{page}", ttl=BANNER_TTL, defaults={"page": "all"}, model=Banner)
+@cached("banner:{page}", ttl=BANNER_TTL, defaults={"page": "all"},
+        model=Banner)
 async def orm_get_banner(
         session: AsyncSession,
         page: str) \
         -> Optional[Banner]:
-
     """
     Функция возвращает баннер для указанной страницы.
 

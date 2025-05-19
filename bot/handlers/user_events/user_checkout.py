@@ -1,5 +1,6 @@
-from typing import Tuple
 import logging
+from typing import Tuple
+
 from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -27,22 +28,17 @@ logger = logging.getLogger(__name__)
 async def checkout(
         session: AsyncSession,
         user_id: int,
-        notification_service: NotificationService
+        notification_service: NotificationService,
 ) -> Tuple[InputMediaPhoto, InlineKeyboardMarkup]:
     """
     Обрабатывает оформление заказа пользователя.
 
-    Параметры:
-      - session: Асинхронная сессия SQLAlchemy для работы с БД.
-      - user_id: Идентификатор пользователя, для которого оформляется заказ.
-      - notification_service: Сервис для отправки уведомлений администратору.
-
     Возвращает:
       - Кортеж из InputMediaPhoto и InlineKeyboardMarkup с информацией о заказе.
-      - В случае ошибки возвращает стандартное сообщение о неудаче.
+      - В случае ошибки возвращает сообщение о неудаче.
     """
 
-    # Значение по умолчанию (ошибка оформления заказа)
+    # Ответ по умолчанию при ошибке
     user_content = (
         InputMediaPhoto(
             media="default_banner.jpg", caption="Ошибка оформления заказа!"
@@ -53,26 +49,22 @@ async def checkout(
     try:
         logger.info(f"Начало оформления заказа для пользователя {user_id}")
 
-        # Получаем баннер для страницы "order"
-        banner = await orm_get_banner(session, "order")
-
         # Получаем корзину пользователя
         carts_user = await orm_get_user_carts(session, user_id)
         if not carts_user:
             logger.warning(f"Корзина пользователя {user_id} пуста")
             return user_content
 
-        # Расчет общей стоимости заказа
+        # Расчёт общей стоимости
         total_price = sum(
             item.quantity * item.product.price for item in carts_user)
 
-        # Создание заказа
+        # Создание заказа и позиций
         order = Order(user_id=user_id, total_price=total_price,
                       status="pending")
         session.add(order)
-        await session.flush()  # Фиксируем изменения и получаем order.id
+        await session.flush()  # Получаем order.id
 
-        # Создание позиций заказа
         order_items = [
             OrderItem(
                 order_id=order.id,
@@ -84,33 +76,46 @@ async def checkout(
         ]
         session.add_all(order_items)
 
-        # Коммит транзакции, чтобы зафиксировать заказ
-        await session.commit()
-
-        # Удаляем товары из корзины после успешного оформления заказа
+        # Удаляем товары из корзины
         for item in carts_user:
             await orm_full_remove_from_cart(session, user_id, item.product_id)
 
-        # Отправляем уведомление администратору
-        admin_text, admin_keyboard = await format_admin_notification(order.id)
-        await notification_service.send_to_admin(
-            text=admin_text, reply_markup=admin_keyboard, parse_mode="HTML"
-        )
+        # Завершаем транзакцию — заказ оформлен
+        await session.commit()
+        logger.info(
+            f"Заказ {order.id} пользователя {user_id} оформлен успешно")
 
-        # Обновляем баннер (если он есть)
-        if banner:
-            await session.refresh(banner)
+    except SQLAlchemyError as db_err:
+        logger.error(f"Ошибка при работе с БД: {db_err}", exc_info=True)
+        await session.rollback()
+        return user_content
+
+    # НЕ транзакционные операции — безопасны и изолированы
+    try:
+        # Получаем баннер отдельно (не обязательно в транзакции)
+        banner = await orm_get_banner(session, "order")
 
         # Формируем ответ пользователю
         user_content = format_user_response(banner, total_price, order_items)
 
-        logger.info(f"Заказ для пользователя {user_id} успешно оформлен")
+    except Exception as format_err:
+        logger.error(
+            f"Ошибка при подготовке ответа пользователю: {format_err}",
+            exc_info=True)
         return user_content
 
-    except SQLAlchemyError as e:
-        logger.error(f"Ошибка оформления заказа: {e}", exc_info=True)
-        await session.rollback()
-        return user_content
+    try:
+        admin_text, admin_keyboard = await format_admin_notification(order.id)
+        await notification_service.send_to_admin(
+            text=admin_text,
+            reply_markup=admin_keyboard,
+            parse_mode="HTML"
+        )
+    except Exception as notify_err:
+        logger.warning(
+            f"Ошибка при отправке уведомления администратору: {notify_err}")
+
+    return user_content
 
 
 # Функция Форматирует уведомление для администратора о новом заказе.
