@@ -1,8 +1,7 @@
 import logging
 from typing import Tuple
 
-from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, \
-    InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.formatting import (
     Bold,
     as_list,
@@ -45,7 +44,7 @@ def format_order_notification(order: Order) -> Tuple[
             as_marked_section(
                 Bold("👤 Пользователь:"),
                 TextLink(
-                    user.first_name or "Без имени",
+                    user.username or f"id{user.user_id}",
                     url=f"tg://user?id={user.user_id}"
                 ),
                 f"Телефон: {user.phone or 'не указан'}",

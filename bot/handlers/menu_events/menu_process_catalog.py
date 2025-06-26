@@ -6,7 +6,7 @@ from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup, \
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Banner, Category, Product
+from database.models import Banner, Product
 from database.orm_querys.orm_query_banner import orm_get_banner
 from database.orm_querys.orm_query_category import orm_get_categories
 from database.orm_querys.orm_query_product import orm_get_products
@@ -47,7 +47,7 @@ async def catalog(
                 else item.created
             )
         }
-        categories_list.append(Category(**category_data))
+    categories_list = list(await orm_get_categories(session))
 
     # Генерируем клавиатуру
     keyboard = get_user_catalog_btn(
@@ -89,6 +89,7 @@ async def products(
             f"<strong>{product.name}</strong>\n"
             f"{product.description}\n"
             f"Стоимость: {round(product.price, 2)} PLN\n"
+            f"📊 Остаток: <b>{product.stock}</b> шт.\n"
             f"Товар {paginator.page} из {paginator.pages}"
         )
     )

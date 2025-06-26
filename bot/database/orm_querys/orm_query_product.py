@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 # Импорт моделей, используемых в запросах
-from database.models import Product, Category, Cart
+from database.models import Product, Category
 
 # Настройка логгера для модуля
 logger = logging.getLogger(__name__)
@@ -18,76 +18,63 @@ logger = logging.getLogger(__name__)
 
 # ======================== РАБОТА С ТОВАРАМИ (CRUD) ========================
 
-async def orm_add_product(
-        session: AsyncSession,
-        data: Dict[str, Any]
-) -> Product:
+async def orm_add_product(session: AsyncSession,
+                          data: Dict[str, Any]) -> Product:
     """
-    Создает новый товар в базе данных с полной валидацией данных.
-
-    Параметры:
-      - session: Асинхронная сессия для работы с БД
-      - data: Словарь с данными товара (должен содержать все обязательные поля)
-
-    Возвращает:
-      - Объект созданного товара Product
-
-    Исключения:
-      - ValueError: При отсутствии полей/некорректных данных
-      - RuntimeError: При ошибках работы с БД
-      - RuntimeError: Внутренние необработанные ошибки
+    Создаёт новый товар в БД.
+    Обязательные поля: name, description, price, image, category, quantity
     """
     logger.info("Попытка добавления нового товара")
 
+    # --- 1. обязательные поля --------------------------------------------
+    required = {"name", "description", "price", "image", "category",
+                "quantity"}
+    if missing := required - data.keys():
+        raise ValueError(
+            f"Отсутствуют обязательные поля: {', '.join(missing)}")
+
+    # --- 2. валидация и преобразование -----------------------------------
     try:
-        # Валидация наличия обязательных полей
-        required_fields = {"name", "description", "price", "image", "category"}
-        if missing := required_fields - data.keys():
-            raise ValueError(f"Отсутствуют обязательные поля: {missing}")
+        price = Decimal(str(data["price"])).quantize(Decimal("1.00"))
+        if price <= 0:
+            raise ValueError("Цена должна быть больше 0")
 
-        # Проверка существования категории в БД
-        category_exists = await session.execute(
-            select(Category.id).where(Category.id == int(data["category"]))
-        )
-        if not category_exists.scalar():
-            raise ValueError(f"Категория {data['category']} не существует")
+        category_id = int(data["category"])
 
-        # Преобразование и валидация типов данных
-        try:
-            # Форматирование цены до двух знаков после запятой
-            price = Decimal(str(data["price"])).quantize(Decimal("0.01"))
-            category_id = int(data["category"])
-        except (ValueError, TypeError) as e:
-            raise ValueError("Некорректные данные цены или категории") from e
+        quantity = int(data["quantity"])
+        if quantity < 0:
+            raise ValueError("Количество не может быть отрицательным")
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            "Некорректные данные price / category / quantity") from e
 
-        # Создание объекта товара
-        product = Product(
-            name=data["name"].strip(),
-            description=data["description"].strip(),
-            price=price,
-            image=data["image"].strip(),
-            category_id=category_id,
-        )
+    # --- 3. проверяем, что категория существует --------------------------
+    if not await session.scalar(
+            select(Category.id).where(Category.id == category_id)):
+        raise ValueError(f"Категория {category_id} не существует")
 
-        # Сохранение в БД
+    # --- 4. собираем объект ----------------------------------------------
+    product = Product(
+        name=data["name"].strip(),
+        description=data["description"].strip(),
+        price=price,
+        image=data["image"].strip(),
+        category_id=category_id,
+        stock=quantity,  # ← новое поле
+    )
+
+    # --- 5. сохраняем -----------------------------------------------------
+    try:
         session.add(product)
-        await session.flush()  # Принудительный flush для получения ID
-        await session.commit()
-
-        logger.info(f"Товар {product.id} создан: {product.name}")
+        await session.flush()  # нужно, чтобы появился product.id
+        logger.info("Товар %s создан: %s", product.id, product.name)
         return product
 
-    except exc.SQLAlchemyError as e:
-        await session.rollback()
-        logger.error(f"Ошибка БД при добавлении товара: {str(e)}")
-        raise RuntimeError("Ошибка создания товара") from e
-    except ValueError as e:
-        logger.warning(f"Некорректные данные: {str(e)}")
-        raise
-    except Exception as e:
-        await session.rollback()
-        logger.exception("Неожиданная ошибка при добавлении товара")
-        raise RuntimeError("Внутренняя ошибка сервера") from e
+    except exc.SQLAlchemyError as db_err:
+        logger.error("Ошибка БД при добавлении товара: %s", db_err)
+        # если управление транзакцией здесь, рас комментируйте строку ниже
+        # await session.rollback()
+        raise RuntimeError("Ошибка создания товара") from db_err
 
 
 async def orm_get_products(
@@ -122,7 +109,7 @@ async def orm_get_products(
         raise ValueError(f"Категория {category_id} не найдена")
 
     try:
-        # Формирование запроса с пагинацией и предзагрузкой категорий
+        # Формирование запроса с пагинацией и пред-загрузкой категорий
         query = (
             select(Product)
             .where(Product.category_id == category_id)
@@ -233,11 +220,11 @@ async def orm_update_product(
             .returning(Product.id)  # Возврат ID для проверки успешности
         )
 
-        await session.commit()
+        # await session.commit()
         return bool(result.scalar_one_or_none())  # True если запись обновлена
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        # await session.rollback()
         logger.error(f"Ошибка обновления товара {product_id}: {str(e)}")
         raise RuntimeError("Ошибка обновления данных") from e
 
@@ -269,10 +256,10 @@ async def orm_delete_product(
             .where(Product.id == product_id)
             .returning(Product.id)
         )
-        await session.commit()
+        # await session.commit()
         return bool(result.scalar_one_or_none())
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        # await session.rollback()
         logger.error(f"Ошибка удаления товара {product_id}: {str(e)}")
         raise RuntimeError("Ошибка удаления товара") from e

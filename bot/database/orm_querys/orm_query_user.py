@@ -10,91 +10,80 @@ logger = logging.getLogger(__name__)
 
 
 # Добавляет или обновляет пользователя в базе данных (UPSERT операция).
+def safe_username(username: Optional[str], user_id: int) -> str:
+    """
+    Возвращает непустой username без «@».
+    Если username None/пустой — генерирует `id<user_id>`.
+    """
+    if username and username.strip():
+        return username.lstrip("@")[:64]          # обрезаем по длине поля
+    return f"id{user_id}"                         # запасной вариант
+
+
 async def orm_add_user(
-        session: AsyncSession,
-        user_id: int,
-        first_name: str = "Не указано",
-        last_name: str = "Не указано",
-        phone: Optional[str] = None,
+    session: AsyncSession,
+    user_id: int,
+    first_name: str = "Не указано",
+    last_name: str = "Не указано",
+    phone: Optional[str] = None,
+    username: Optional[str] = None,               # ← новый аргумент
 ) -> Dict[str, Any]:
     """
-    Добавляет или обновляет пользователя.
-
-    Возвращает:
-        dict: Словарь с ключами:
-            - status (str): 'created', 'updated' или 'error'
-            - details (dict | str | None): Дополнительная информация
+    UPSERT пользователя. Всегда возвращает
+    {'status': 'created'|'updated', 'details': {...}}  либо кидает исключение.
     """
-    result_info: Dict[str, Any] = {"status": "error", "details": None}
+    # ---------- валидация / нормализация ---------------------------------
+    first_name = (first_name or "Не указано").strip()[:150]
+    last_name  = (last_name or "Не указано").strip()[:150]
+    phone      = phone.strip()[:13] if phone else None
+    username   = safe_username(username, user_id)          # ← гарантировано не NULL
 
-    # Валидация данных
-    first_name = first_name.strip()[:150] if first_name else "Не указано"
-    last_name = last_name.strip()[:150] if last_name else "Не указано"
-    phone = phone[:13].strip() if phone else None
-
-    # Подготовка данных для UPSERT
-    insert_data = {
-        "user_id": user_id,
-        "first_name": first_name,
-        "last_name": last_name,
-        "phone": phone,
-        "created": func.now(),
-        "updated": func.now(),
-    }
-
-    # Операция UPSERT (вставка или обновление)
-    upsert_stmt = (
+    # ---------- upsert ---------------------------------------------------
+    stmt = (
         insert(User)
-        .values(**insert_data)
+        .values(
+            user_id=user_id,
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+            username=username,
+            created=func.now(),
+            updated=func.now(),
+        )
         .on_conflict_do_update(
-            index_elements=["user_id"],
+            index_elements=[User.user_id],
             set_={
-                "first_name": insert_data["first_name"],
-                "last_name": insert_data["last_name"],
-                "phone": insert_data["phone"],
-                "updated": func.now(),  # `created` не обновляем
-            }
+                "first_name": first_name,
+                "last_name": last_name,
+                "phone": phone,
+                "username": username,
+                "updated": func.now(),
+            },
         )
         .returning(User.user_id, User.created, User.updated)
     )
+
     try:
-        # Проверяем, не находимся ли мы уже в транзакции
-        if session.in_transaction():
-            # Если уже в транзакции, выполняем только запрос
-            result = await session.execute(upsert_stmt)
-            row = result.first()
-        else:
-            # Если нет активной транзакции, создаем новую
-                result = await session.execute(upsert_stmt)
-                row = result.first()
+        row = (await session.execute(stmt)).first()
+        if not row:
+            raise RuntimeError("UPSERT did not return row")
 
-        if row:
-            is_new = row.created == row.updated
-            result_info.update(
-                status="created" if is_new else "updated",
-                details={
-                    "user_id": row.user_id,
-                    "created": row.created,
-                    "updated": row.updated
-                },
-            )
-            logger.info(
-                f"User {'created' if is_new else 'updated'}: {user_id}"
-            )
+        is_new = row.created == row.updated
+        status = "created" if is_new else "updated"
+        logger.info(f"User {status}: {user_id}")
+
+        return {
+            "status": status,
+            "details": {
+                "user_id": row.user_id,
+                "created": row.created,
+                "updated": row.updated,
+            },
+        }
+
     except exc.IntegrityError as e:
-        logger.error(f"Integrity error while adding user {user_id}: {str(e)}")
-        result_info["details"] = str(e)
+        logger.error(f"[User {user_id}] integrity error: {e}")
         raise
-
     except exc.SQLAlchemyError as e:
-        logger.error(f"Database error while adding user {user_id}: {str(e)}")
-        result_info["details"] = str(e)
+        logger.error(f"[User {user_id}] DB error: {e}")
         raise
-
-    except Exception as e:
-        logger.exception(
-            f"Unexpected error while adding user {user_id}: {str(e)}")
-        result_info["details"] = str(e)
-        raise
-
-    return result_info

@@ -28,7 +28,7 @@ class Paginator:
         """
         self.array = array
         self.per_page = per_page
-        self.page = page
+        self.page = page or 1
         self.len = len(self.array)  # Общее количество элементов
         self.pages = math.ceil(
             self.len / self.per_page)  # Общее количество страниц

@@ -1,0 +1,28 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Bot Metrics",
+    "panels": [
+      {
+        "type": "graph",
+        "title": "Requests Per Second",
+        "targets": [
+          {
+            "expr": "rate(bot_requests_total[1m])",
+            "legendFormat": "Requests"
+          }
+        ],
+        "datasource": "Prometheus",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        }
+      }
+    ],
+    "schemaVersion": 30,
+    "version": 1
+  },
+  "overwrite": true
+}

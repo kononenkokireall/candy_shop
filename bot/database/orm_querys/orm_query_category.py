@@ -3,12 +3,15 @@ from typing import List, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from cache.decorators import cached
+from cache.invalidator import CacheInvalidator
 
 from ..models import Category
 
 logger = logging.getLogger(__name__)
 
 
+@cached("categories:all", ttl=3600, model=Category)
 async def orm_get_categories(session: AsyncSession) -> Sequence[Category]:
     """
     Получить все категории товаров с кэшированием.
@@ -51,12 +54,13 @@ async def orm_create_categories(session: AsyncSession,
             return 0
 
         session.add_all(new_categories)
-        await session.commit()
+        #await session.commit()
+        await CacheInvalidator.invalidate_by_pattern("categories*")
         logger.info(f"Успешно добавлено {len(new_categories)} новых категорий")
         return len(new_categories)
 
     except Exception as e:
-        await session.rollback()
+       # await session.rollback()
         logger.critical(
             f"Критическая ошибка при добавлении категорий: {str(e)}")
         raise

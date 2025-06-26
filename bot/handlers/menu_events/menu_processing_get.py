@@ -1,5 +1,8 @@
 import logging
+from enum import IntEnum
+from typing import Callable, Awaitable
 
+from aiogram.types import InputMediaPhoto, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from handlers.menu_events.menu_main import main_menu
@@ -11,7 +14,24 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
-# Роутер для получения контента меню в зависимости от уровня.
+class MenuLevel(IntEnum):
+    MAIN = 0
+    CATALOG = 1
+    PRODUCTS = 2
+    CART = 3
+
+MediaResp = tuple[InputMediaPhoto | None, InlineKeyboardMarkup]
+Handler = Callable[..., Awaitable[MediaResp]]
+
+# Карта уровней → коро утин-обработчик + перечень обязательных аргументов
+MENU_ROUTING: dict[MenuLevel, tuple[Handler, tuple[str, ...]]] = {
+    MenuLevel.MAIN: (main_menu, ()),
+    MenuLevel.CATALOG: (catalog, ()),
+    MenuLevel.PRODUCTS: (products, ("category",)),  # page нормализуем
+    MenuLevel.CART: (carts, ("user_id",)),
+}
+
+
 async def get_menu_content(
         session: AsyncSession,
         level: int,
@@ -20,14 +40,41 @@ async def get_menu_content(
         page: int | None = None,
         product_id: int | None = None,
         user_id: int | None = None,
-):
+) -> MediaResp:
+    """Диспетчер: по уровню вызывает нужный генератор меню."""
 
-    if level == 0:
-        return await main_menu(session, level, menu_name)
-    elif level == 1:
-        return await catalog(session, level, menu_name)
-    elif level == 2:
-        return await products(session, level, category, page)
-    elif level == 3:
-        return await carts(session, level, menu_name, page, user_id,
-                           product_id)
+    try:
+        lvl = MenuLevel(level)
+    except ValueError:
+        raise ValueError(f"Unknown menu level {level}")
+
+    handler, required = MENU_ROUTING[lvl]
+
+    # Грубая валидация обязательных параметров
+    missing = {
+        "category": category,
+        "page": page,
+        "user_id": user_id,
+
+    }
+    for name in required:
+        if missing.get(name) is None:
+            raise ValueError(
+                f"Parameter «{name}» is required for level {level}")
+
+    # Нормализация
+    page = page or 1
+
+    # Вызываем соответствующий коро утин
+    if lvl is MenuLevel.MAIN:
+        return await handler(session, level, menu_name)
+    if lvl is MenuLevel.CATALOG:
+        return await handler(session, level, menu_name)
+    if lvl is MenuLevel.PRODUCTS:
+        return await handler(session, level, category, page)
+    if lvl is MenuLevel.CART:
+        return await handler(session, level, menu_name, page, user_id,
+                             product_id)
+
+    # на всякий случай
+    raise RuntimeError("Unreachable code")

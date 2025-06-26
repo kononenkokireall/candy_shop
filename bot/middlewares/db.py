@@ -1,28 +1,37 @@
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Dict
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
-
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
-class DataBaseSession(BaseMiddleware):
+class DBSessionMiddleware(BaseMiddleware):
     """
-    Middleware для предоставления сессии БД в каждый хенд лер.
-    Создаёт сессию из session_pool и передаёт её в хенд лер через data["session"].
+    Даёт хэндлерам SQLAlchemy-сессию (data["session"]).
     """
 
-    def __init__(self, session_pool: async_sessionmaker[AsyncSession]):
-        self.session_pool = session_pool
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]):
+        super().__init__()
+        self.session_maker = session_maker
 
-    async def __call__(
-        self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
-        event: TelegramObject,
-        data: Dict[str, Any],
-    ) -> Any:
-        # Создаем сессию без начала транзакции
-        async with self.session_pool() as session:
+    async def __call__(self, handler, event, data: Dict[str, Any]):
+        async with self.session_maker() as session:
+            # кладём сессию в DI-контейнер
             data["session"] = session
-            # Хенд лер сам управляет транзакцией, если нужно
-            return await handler(event, data)
+
+            # оставляем всё, что действительно требуется aiogram’у
+            filtered = {
+                k: v
+                for k, v in data.items()
+                # убираем только «тяжёлые» или дублирующие объекты,
+                # которые хэндлерам никогда не нужны
+                if k not in {"dispatcher", "event_context", "update"}
+            }
+
+            try:
+                # ВАЖНО: передаём одним словарём вторым позиционным
+                result = await handler(event, filtered)
+                await session.commit()
+                return result
+            except Exception:
+                await session.rollback()
+                raise

@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional, Mapping, Sequence
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -13,22 +13,32 @@ def get_user_cart_btn(
         level: int,
         # Номер страницы корзины; если задан,
         # значит корзина содержит список товаров с постраничной навигацией
-        page: Optional[int],
+        page: Optional[int] = None,
         # Словарь кнопок пагинации (например, {"Вперед": "next",
         # "Назад": "prev"})
-        pagination_btn: Optional[Dict[str, str]],
+        pagination_btn: Mapping[str, str] | None = None,
         # Идентификатор продукта,
         # для которого выполняется действие (может быть None)
-        product_id: Optional[int],
+        product_id: Optional[int] = None,
         # Кортеж, определяющий компоновку кнопок в ряды (например, (3,)
         # означает 3 кнопки в ряду)
-        sizes: tuple[int, ...] = (3,)
+        sizes: Sequence[int] = (3,),
 ) -> InlineKeyboardMarkup:
+    """
+    Кнопки корзины пользователя.
+
+    :param level: текущий level FSM/menu
+    :param page: номер страницы (``None`` – без пагинации)
+    :param product_id: ID товара, к которому относятся +/-/delete
+    :param pagination_btn: подписи → ``'next'`` / ``'prev'``
+    :param sizes: схема раскладки для «➖ / ➕ / Удалить».
+    """
+
     # Создаем билдер для формирования inline-клавиатуры.
     keyboard = InlineKeyboardBuilder()
 
     # Если параметр page задан (т.е. Корзина содержит постраничную навигацию)
-    if page:
+    if page is not None:
         # Добавляем кнопку "❌ Удалить" для удаления продукта из корзины.
         # Callback-данные включают текущий уровень, действие 'delete',
         # product_id и номер страницы.
@@ -47,7 +57,8 @@ def get_user_cart_btn(
             InlineKeyboardButton(
                 text="➖",
                 callback_data=MenuCallBack(
-                    level=level, menu_name="decrement", product_id=product_id,
+                    level=level, menu_name="decrement",
+                    product_id=product_id,
                     page=page
                 ).pack(),
             )
@@ -57,7 +68,8 @@ def get_user_cart_btn(
             InlineKeyboardButton(
                 text="➕",
                 callback_data=MenuCallBack(
-                    level=level, menu_name="increment", product_id=product_id,
+                    level=level, menu_name="increment",
+                    product_id=product_id,
                     page=page
                 ).pack(),
             )
@@ -132,6 +144,6 @@ def get_user_cart_btn(
         )
         # Возвращаем клавиатуру
         # с настройкой расположения кнопок согласно sizes.
-        keyboard.adjust(*sizes)
+        # keyboard.adjust(*sizes)
 
         return keyboard.as_markup()

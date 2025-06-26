@@ -63,10 +63,10 @@ async def orm_create_order(
 
     except exc.SQLAlchemyError as e:
         logger.error(f"Ошибка БД при создании заказа: {str(e)}")
-        await session.rollback()
+        #await session.rollback()
         raise
     except Exception as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка валидации: {str(e)}")
         raise
 
@@ -99,20 +99,20 @@ async def orm_add_order(
         if abs(order.total_price - total_price) > 0.01:
             raise ValueError("Расхождение в общей сумме заказа")
 
-        await session.commit()
+        #await session.commit()
         # await CacheInvalidator.invalidate([f"orders:user:{user_id}"])
         logger.info(f"Заказ {order.id} успешно оформлен")
         return order
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.critical(f"Критическая ошибка БД: {str(e)}", exc_info=True)
         raise RuntimeError("Ошибка сохранения заказа") from e
     except ValueError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка валидации данных: {str(e)}")
         raise RuntimeError("Некорректные данные заказа") from e
     except Exception as e:
-        await session.rollback()
+        #await session.rollback()
         logger.exception("Неожиданная ошибка при создании заказа")
         raise RuntimeError("Системная ошибка") from e

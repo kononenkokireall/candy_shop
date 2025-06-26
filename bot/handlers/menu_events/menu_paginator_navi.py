@@ -3,7 +3,7 @@ from utilit.paginator import Paginator
 
 # Функция для создания кнопок постраничной навигации
 def pages(paginator: Paginator) -> dict[str, str]:
-    btn = {}
+    btn: dict[str, str] = {}
     # Если доступна предыдущая страница, добавляем кнопку "Пред."
     if paginator.has_previous():
         btn["◀️Пред."] = "prev"

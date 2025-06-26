@@ -235,11 +235,11 @@ async def orm_update_order_status(
             .returning(Order.id)
         )
         updated = result.scalar_one_or_none()
-        await session.commit()
+        #await session.commit()
         return bool(updated)
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка обновления статуса: {str(e)}")
         raise RuntimeError("Ошибка обновления статуса заказа") from e
 
@@ -272,11 +272,11 @@ async def orm_delete_order(
             delete(Order).where(Order.id == order_id).returning(Order.id)
         )
 
-        await session.commit()
+        #await session.commit()
         return bool(result.scalar_one_or_none())
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка удаления заказа: {str(e)}")
         raise RuntimeError("Ошибка удаления заказа") from e
 

@@ -1,10 +1,10 @@
 import logging
-from typing import Optional
+import os
 
 from aiogram import types, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
-from aiogram.types import InputMediaPhoto
+from aiogram.types import InputMediaPhoto, FSInputFile, CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.orm_querys.orm_query_cart import orm_add_to_cart
@@ -14,6 +14,8 @@ from handlers.menu_events.menu_processing_get import get_menu_content
 from handlers.user_events.user_checkout import checkout
 from keyboards.inline_main import MenuCallBack
 from utilit.config import settings
+from utilit.metrics import start_command_errors, start_command_counter, \
+    start_command_duration
 from utilit.notification import NotificationService
 
 user_private_router = Router()
@@ -26,40 +28,45 @@ logger = logging.getLogger(__name__)
 
 # Обработчик команды /start. Инициализирует сессию пользователя.
 @user_private_router.message(CommandStart())
-async def start_cmd(message: types.Message, session: AsyncSession) -> None:
+async def start_cmd(
+        message: types.Message,
+        session: AsyncSession,  # получаем из middleware
+) -> None:
+    start_command_counter.inc()
+
     if not message.from_user:
-        logger.error("Отсутствует информация о пользователе в message")
-        await message.answer("Ошибка авторизации", show_alert=True)
+        logger.error("Отсутствует from_user")
+        start_command_errors.inc()
+        await message.answer("Ошибка авторизации")
         return
 
     user_id = message.from_user.id
 
-    try:
-        # Получаем медиа и клавиатуру
-        media, reply_markup = await get_menu_content(session, level=0,
-                                                     menu_name="main",
-                                                     user_id=user_id,
-                                                     )
+    with start_command_duration.time():
+        try:
+            media, kb = await get_menu_content(
+                session=session,
+                level=0,
+                menu_name="main",
+                user_id=user_id,
+            )
 
-        # Проверяем, что полученные значения корректны
-        if media is None or reply_markup is None:
-            logger.error("Не удалось получить медиа или клавиатуру для /start")
-            await message.answer("Ошибка загрузки меню. Попробуйте позже.")
-            return
+            if media is None or kb is None:
+                raise RuntimeError("get_menu_content вернул None")
 
-        # Проверяем, что media является InputMediaPhoto, и обрабатываем его
-        if isinstance(media, InputMediaPhoto):
-            await message.answer_photo(media.media, caption=media.caption,
-                                       reply_markup=reply_markup)
-        else:
-            logger.error(f"Неверный тип медиа: {type(media)}")
-            await message.answer("Ошибка загрузки медиа. Попробуйте позже.")
+            # --- отправляем пользователю ---
+            if isinstance(media, InputMediaPhoto):
+                await message.answer_photo(
+                    photo=media.media, caption=media.caption, reply_markup=kb
+                )
+            else:  # Fallback: строка-file_id, документ и т.д.
+                await message.answer_photo(media, reply_markup=kb)
 
-    except Exception as e:
-        logger.error(f"Ошибка при обработке команды /start: {e}",
-                     exc_info=True)
-        await message.answer(
-            "Произошла ошибка при обработке команды. Попробуйте позже.")
+        except Exception as e:
+            logger.error("Ошибка /start: %s", e, exc_info=True)
+            start_command_errors.inc()
+            await message.answer(
+                "Произошла внутренняя ошибка. Попробуйте позже.")
 
 
 # Показывает справку по использованию бота.
@@ -139,111 +146,106 @@ async def add_to_cart(callback: types.CallbackQuery,
 # Главный обработчик callback-запросов для навигации по меню.
 @user_private_router.callback_query(MenuCallBack.filter())
 async def user_menu(
-        callback: types.CallbackQuery,
+        callback: CallbackQuery,
         callback_data: MenuCallBack,
         session: AsyncSession,
-        notification_service: Optional[NotificationService] = None
+        notification_service: NotificationService | None = None,
 ) -> None:
+
     user_id = callback.from_user.id if callback.from_user else None
     if not user_id:
-        logger.error("Callback не содержит информации о пользователе")
+        logger.error("Callback без пользователя")
         await callback.answer("Ошибка авторизации", show_alert=True)
         return
 
     notification_service = notification_service or NotificationService(
         bot=callback.bot,
-        admin_chat_id=settings.ADMIN_CHAT_ID
+        admin_chat_id=settings.ADMIN_CHAT_ID,
     )
 
     try:
-        # Обработка чек-аута
+        # ------------------- checkout --------------------------------------
         if callback_data.menu_name == "checkout" and callback_data.level == 4:
-            media, keyboards = await checkout(session, user_id,
-                                              notification_service)
-
-            if not callback.message:
-                await callback.answer("Ошибка: сообщение недоступно!",
-                                      show_alert=True)
-                return
+            await callback.answer("⏳ Готовим заказ…")
 
             try:
-                await callback.message.edit_media(media=media,
-                                                  reply_markup=keyboards)
+                media, kb = await checkout(
+                    session, user_id, notification_service
+                )
+            except ValueError as e:  ### <--- NEW
+                # Нормальная бизнес-ошибка (нет товара, и т.д.)
+                await callback.message.answer(str(e))  # показываем текст
+                await callback.answer()
+                return
+
+            if not callback.message:
+                await callback.answer("Сообщение недоступно", show_alert=True)
+                return
+
+            if isinstance(media, str) and os.path.isfile(media):  ### <--- NEW
+                media = InputMediaPhoto(media=FSInputFile(media))
+
+            try:
+                await callback.message.edit_media(media=media, reply_markup=kb)
             except TelegramBadRequest as e:
                 if "message is not modified" in str(e):
-                    await callback.answer("Корзина уже актуальна",
-                                          show_alert=True)
+                    await callback.answer("Корзина актуальна", show_alert=True)
                 else:
                     raise
             finally:
                 await callback.answer()
             return
 
-        # Обработка добавления в корзину
+        # ------------------- add_to_cart -----------------------------------
         if callback_data.menu_name == "add_to_cart":
             await add_to_cart(callback, callback_data, session)
             await callback.answer()
             return
 
-        # Основная логика меню
+        # ------------------- обычная навигация -----------------------------
         message = callback.message
         if not message:
-            await callback.answer("Ошибка: сообщение недоступно!",
-                                  show_alert=True)
+            await callback.answer("Сообщение недоступно", show_alert=True)
             return
 
-        current_photo_id = message.photo[-1].file_id if message.photo else None
-        current_markup = message.reply_markup
+        page = callback_data.page or 1
 
         media, new_markup = await get_menu_content(
             session,
             level=callback_data.level,
             menu_name=callback_data.menu_name,
             category=callback_data.category,
-            page=callback_data.page,
+            page=page,
             user_id=user_id,
-            product_id=callback_data.product_id
+            product_id=callback_data.product_id,
         )
-
-        if not media:
-            await callback.answer("Медиа не найдено.", show_alert=True)
+        if media is None:                                        ### <--- NEW
+            await message.edit_reply_markup(reply_markup=new_markup)
+            await callback.answer()
             return
 
-        # Приведение строки к InputMediaPhoto
+        # --------- приводим media к InputMediaPhoto ------------------------
         if isinstance(media, str):
-            media = InputMediaPhoto(media=media)
+            if os.path.isfile(media):  # локальный файл
+                media = InputMediaPhoto(media=FSInputFile(media))
+            else:  # URL или file_id
+                media = InputMediaPhoto(media=media)
         elif not isinstance(media, InputMediaPhoto):
-            await callback.answer("Неподдерживаемый тип медиа.",
+            await callback.answer("Неподдерживаемый тип медиа",
                                   show_alert=True)
             return
-
-        # # Проверка изменений
-        # media_changed = media.media != current_photo_id
-        # markup_changed = str(new_markup) != str(current_markup)
-        #
-        # if not media_changed and not markup_changed:
-        #     await callback.answer("Сообщение уже актуально.", show_alert=True)
-        #     return
 
         try:
             await message.edit_media(media=media, reply_markup=new_markup)
         except TelegramBadRequest as e:
             if "message is not modified" in str(e):
-                logger.warning(f"Сообщение не изменено: {e}")
+                logger.debug("Сообщение не изменено: %s", e)
             else:
-                logger.error(f"Ошибка при редактировании медиа: {e}",
-                             exc_info=True)
-                await callback.answer("Ошибка обновления контента",
-                                      show_alert=True)
-        except Exception as e:
-            logger.error(f"Неожиданная ошибка: {e}", exc_info=True)
-            await callback.answer("Произошла непредвиденная ошибка",
-                                  show_alert=True)
+                logger.error("Ошибка edit_media: %s", e, exc_info=True)
+                await callback.answer("Ошибка обновления", show_alert=True)
         else:
             await callback.answer()
 
     except Exception as e:
-        logger.error(f"Критическая ошибка в обработчике меню: {e}",
-                     exc_info=True)
-        await callback.answer("Произошла ошибка при обработке запроса.",
-                              show_alert=True)
+        logger.error("Критическая ошибка user_menu: %s", e, exc_info=True)
+        await callback.answer("Ошибка обработки запроса", show_alert=True)

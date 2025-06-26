@@ -10,6 +10,12 @@ from keyboards.inline_main import MenuCallBack
 # Импортируем настройки (например, ADMIN_CHAT_ID) из конфигурационного файла
 from utilit.config import settings
 
+__all__ = [
+    "OrderAction",
+    "build_admin_keyboard",
+    "build_user_keyboard",
+]
+
 
 # Класс OrderAction используется для формирования callback-данных для заказа.
 # Он наследует CallbackData и автоматически добавляет префикс "order"
@@ -23,28 +29,25 @@ class OrderAction(CallbackData, prefix="order"):
 # Функция build_admin_keyboard создает inline-клавиатуру для администратора,
 # позволяющую подтверждать или отменять заказ по его идентификатору.
 def build_admin_keyboard(order_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Подтвердить",
-                    # Формируем callback-данные
-                    # для подтверждения заказа с указанным order_id
-                    callback_data=OrderAction(
-                        action="confirm", order_id=order_id
-                    ).pack(),
-                ),
-                InlineKeyboardButton(
-                    text="❌ Отменить",
-                    # Формируем callback-данные
-                    # для отмены заказа с указанным order_id
-                    callback_data=OrderAction(
-                        action="cancel", order_id=order_id
-                    ).pack(),
-                ),
-            ]
-        ]
+    """
+    «✅ Подтвердить / ❌ Отменить» – для админа под карточкой заказа.
+    """
+    keyboard = InlineKeyboardBuilder()
+
+    keyboard.row(
+        InlineKeyboardButton(
+            text="✅ Подтвердить",
+            callback_data=OrderAction(action="confirm",
+                                      order_id=order_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text="❌ Отменить",
+            callback_data=OrderAction(action="cancel",
+                                      order_id=order_id).pack(),
+        ),
     )
+
+    return keyboard.as_markup()
 
 
 # Функция build_user_keyboard создает inline-клавиатуру для пользователя.
@@ -62,19 +65,31 @@ def build_user_keyboard() -> InlineKeyboardMarkup:
     # который формируется с использованием ADMIN_CHAT_ID
     # Вторая кнопка: возвращает пользователя в главное меню,
     # передавая соответствующие callback-данные
-    keyboard.add(
+    admin_chat_id = getattr(settings, "ADMIN_CHAT_ID", None)
+    if not admin_chat_id:
+        # оставить только кнопку «Обратно в меню»,
+        # если ID администратора не задан в конфиге
+        keyboard.add(
+            InlineKeyboardButton(
+                text="🏠 Обратно в меню",
+                callback_data=MenuCallBack(level=0,
+                                           menu_name="main").pack(),
+            )
+        )
+        return keyboard.as_markup()
+
+    keyboard.row(  # каждая кнопка в своём ряду
         InlineKeyboardButton(
             text="Чат с админом 💬",
-            url=f"tg://user?id={settings.ADMIN_CHAT_ID}"
-        ),
+            url=f"tg://user?id={admin_chat_id}",
+        )
+    )
+    keyboard.row(
         InlineKeyboardButton(
-            text="🏠Обратно в меню",
-            callback_data=MenuCallBack(level=0, menu_name="main").pack(),
-        ),
+            text="🏠 Обратно в меню",
+            callback_data=MenuCallBack(level=0,
+                                       menu_name="main").pack(),
+        )
     )
 
-    # Организуем кнопки в ряды (по одной кнопке в ряду)
-    keyboard.adjust(1)
-
-    # Преобразуем билдера в итоговую разметку клавиатуры и возвращаем её
     return keyboard.as_markup()

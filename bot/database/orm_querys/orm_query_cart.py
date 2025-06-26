@@ -54,13 +54,13 @@ async def orm_add_to_cart(
         )
 
         result = await session.execute(stmt)
-        await session.commit()
+        #await session.commit()
         return result.scalar_one()
 
     except (IntegrityError, SQLAlchemyError) as e:
         logger.error(f"[Cart] Ошибка добавления товара: {str(e)}",
                      exc_info=True)
-        await session.rollback()
+        #await session.rollback()
         return None
 
 
@@ -111,11 +111,11 @@ async def orm_add_product_to_cart(
             )
             session.add(cart_item)
 
-        await session.commit()
+        #await session.commit()
         return cart_item
 
     except SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(
             f"[Cart] Error при добавлении товара {product_id} для пользователя {user_id}: {str(e)}")
         raise
@@ -145,7 +145,7 @@ async def orm_reduce_product_in_cart(
                 f"[Cart] Quantity для товара {product_id} уже 1. Не уменьшаем.")
 
         cart_item.updated = func.now()
-        await session.commit()
+        #await session.commit()
         return cart_item
 
     except SQLAlchemyError as e:
@@ -167,7 +167,7 @@ async def orm_full_remove_from_cart(
             execution_options={"synchronize_session": False}
         )
         deleted_id = result.scalar_one_or_none()
-        await session.commit()
+        #await session.commit()
         return bool(deleted_id)
 
     except SQLAlchemyError as e:

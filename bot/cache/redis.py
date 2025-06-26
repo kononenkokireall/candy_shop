@@ -1,50 +1,87 @@
 """
-Конфигурация Redis для асинхронного доступа с поддержкой Heroku и SSL
+Redis connection manager (v2).
+
+* Один пул Redis, размер задаётся `REDIS_POOL_SIZE`.
+* TLS-проверка сертификата включена; отключается переменной
+  `REDIS_INSECURE_SSL=1`.
+* Функции:
+    • init_pool()   – создать пул (лениво).
+    • get_redis()   – async-context, отдаёт клиент из пула.
+    • close_pool()  – закрыть на shut-down.
+* `redis_cache.session()` – adapter для обратной совместимости.
 """
+from __future__ import annotations
 
-from redis.asyncio import Redis  # Импорт асинхронного клиента из новой версии
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 import os
-import ssl  # Для корректной работы с SSL-параметрами
+import ssl
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Final
 
-class RedisCache:
-    """
-    Менеджер пула соединений Redis с обработкой Heroku-специфичных параметров
-    """
+from redis.asyncio import Redis
 
-    def __init__(self):
-        self.redis: Redis | None = None
+__all__ = ["init_pool", "get_redis", "close_pool", "redis_cache"]
 
-    async def init_cache(self):
-        """Инициализация подключения с учетом SSL"""
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+# ---------------------------------------------------------------------------
+# Конфигурация
+# ---------------------------------------------------------------------------
+REDIS_URL: Final[str] = os.getenv("REDIS_URL", "redis://localhost:6379")
+MAX_CONN: Final[int] = int(os.getenv("REDIS_POOL_SIZE", "10"))
 
-        # Конфигурация SSL (для Redis Cloud/Heroku)
-        ssl_config = {}
-        if redis_url.startswith("rediss://"):
-            ssl_config["ssl_cert_reqs"] = ssl.CERT_NONE
+ssl_kwargs: dict[str, object] = {}
+if REDIS_URL.startswith("rediss://"):
+    ssl_kwargs["ssl_cert_reqs"] = (
+        ssl.CERT_NONE if os.getenv("REDIS_INSECURE_SSL") == "1"
+        else ssl.CERT_REQUIRED
+    )
 
-        self.redis = Redis.from_url(
-            redis_url,
+# ---------------------------------------------------------------------------
+# Пул (singleton)
+# ---------------------------------------------------------------------------
+_pool: Redis | None = None
+
+
+async def init_pool() -> Redis:
+    """Создаёт глобальный пул, если он ещё не создан."""
+    global _pool  # noqa: PLW0603
+    if _pool is None:
+        _pool = Redis.from_url(
+            REDIS_URL,
+            max_connections=MAX_CONN,
             decode_responses=True,
-            **ssl_config
+            **ssl_kwargs,
         )
-        # Проверка подключения
-        await self.redis.ping()
+        await _pool.ping()  # ленивый тест соединения
+    return _pool
 
+
+@asynccontextmanager
+async def get_redis() -> AsyncGenerator[Redis, None]:
+    """Контекст-менеджер, возвращающий клиент Redis из пула."""
+    pool = await init_pool()
+    try:
+        yield pool
+    finally:
+        # Пул живёт всё время приложения
+        pass
+
+
+async def close_pool() -> None:
+    """Закрыть соединения (вызывайте при завершении приложения)."""
+    global _pool  # noqa: PLW0603
+    if _pool:
+        await _pool.close()
+        await _pool.connection_pool.disconnect()
+        _pool = None
+
+
+# ---------------------------------------------------------------------------
+# Back-combat adapter  (оставляем вызов redis_cache.session())
+# ---------------------------------------------------------------------------
+class _RedisCacheAdapter:  # pylint: disable=too-few-public-methods
     @asynccontextmanager
     async def session(self) -> AsyncGenerator[Redis, None]:
-        """
-        Контекстный менеджер для работы с Redis.
-        """
-        if not self.redis:
-            await self.init_cache()
-        try:
-            yield self.redis
-        finally:
-            # Очистка ресурсов при необходимости
-            pass
+        async with get_redis() as redis:
+            yield redis
 
-# Глобальный экземпляр для повторного использования
-redis_cache = RedisCache()
+
+redis_cache = _RedisCacheAdapter()  # экспорт для старого кода

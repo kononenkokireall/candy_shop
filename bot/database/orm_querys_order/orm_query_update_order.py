@@ -51,7 +51,7 @@ async def orm_update_order_status(
         if updated_order:
             logger.info(f"Статус заказа {order_id}"
                         f" успешно изменен на {new_status}")
-            await session.commit()
+            #await session.commit()
             return True
 
         logger.warning(f"Заказ {order_id} не найден")
@@ -62,10 +62,10 @@ async def orm_update_order_status(
             f"Ошибка БД при обновлении заказа {order_id}: {str(e)}",
             exc_info=True
         )
-        await session.rollback()
+        #await session.rollback()
         raise
     except Exception as e:
         logger.exception(f"Неожиданная ошибка при обновлении заказа"
                          f" {order_id}")
-        await session.rollback()
+        #await session.rollback()
         raise RuntimeError("Ошибка обновления статуса") from e

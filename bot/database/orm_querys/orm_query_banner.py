@@ -49,7 +49,7 @@ async def orm_add_banner_description(
         ]
         # Добавляем созданные объекты в сессию.
         session.add_all(banners)
-        await session.commit()
+        #await session.commit()
         # Инвалидация по каждому ключу
         for name in data.keys():
             await CacheInvalidator.invalidate([
@@ -63,7 +63,7 @@ async def orm_add_banner_description(
         # Логируем исключение,
         # откатываем транзакцию и пробрасываем ошибку дальше.
         logger.exception(f"Ошибка при добавлении баннеров {e}")
-        await session.rollback()
+        #await session.rollback()
         raise
 
 
@@ -110,7 +110,7 @@ async def orm_change_banner_image(
                 f"menu:*page={name}*"
             ])
             await CacheInvalidator.invalidate_by_pattern(f"*{name}*")  # Важно!
-            await session.commit()
+            #await session.commit()
             logger.info(
                 f"Баннер '{name}' успешно обновлен. Кэш инвалидирован.")
 
@@ -120,7 +120,7 @@ async def orm_change_banner_image(
 
     except Exception as e:
         logger.critical(f"Критическая ошибка при обновлении баннера: {str(e)}")
-        await session.rollback()  # Явный откат на случай ошибок вне транзакции
+        #await session.rollback()  # Явный откат на случай ошибок вне транзакции
         raise
 
 

@@ -1,67 +1,54 @@
 """
-Инвалидация кэша с использованием Redis SCAN для больших наборов данных
+Инвалидация кэша: точечно и по паттерну SCAN.
 """
+from __future__ import annotations
 
-from typing import List, Optional
-from cache.redis import redis_cache
 import logging
+from typing import List, Optional
+
+from cache.redis import get_redis
 
 logger = logging.getLogger(__name__)
 
 
 class CacheInvalidator:
-    """
-    Безопасная инвалидация кэша через SCAN-итератор вместо KEYS
-    Решает проблемы:
-    - Блокировка Redis при больших наборах ключей
-    - Пакетная обработка для оптимизации производительности
-    """
+    """Helpers to delete Redis keys safely."""
 
+    # ---------------- direct keys ----------------
     @staticmethod
     async def invalidate(keys: List[str]) -> None:
-        """Пакетное удаление по прямым ключам"""
+        if not keys:
+            return
         try:
-            async with redis_cache.session() as redis:
-                if keys:
-                    deleted = await redis.delete(*keys)
-                    logger.debug(f"Deleted {deleted} keys: {keys}")
-        except Exception as e:
-            logger.error(f"[CACHE INVALIDATE ERROR] keys={keys}, error={e}")
+            async with get_redis() as redis:
+                deleted = await redis.delete(*keys)
+            logger.debug("Deleted %s keys: %s", deleted, keys)
+        except Exception as exc:  # pragma: no cover
+            logger.error("Invalidate error keys=%s: %s", keys, exc)
 
+    # ---------------- by pattern -----------------
     @staticmethod
     async def invalidate_by_pattern(pattern: str) -> None:
-        """Итеративное удаление по паттерну с использованием SCAN"""
+        cursor = 0
+        total_deleted = 0
         try:
-            async with redis_cache.session() as redis:
-                cursor, deleted_total = "0", 0
-                while cursor != 0:
-                    # Получаем ключи порциями по 1000 для избежания блокировок
-                    cursor, keys = await redis.scan(
-                        cursor=cursor,
-                        match=pattern,
-                        count=1000
-                    )
+            async with get_redis() as redis:
+                while True:
+                    cursor, keys = await redis.scan(cursor, match=pattern,
+                                                    count=1000)
                     if keys:
-                        deleted = await redis.delete(*keys)
-                        deleted_total += deleted
-                        logger.debug(
-                            f"Deleted {deleted} keys by pattern {pattern}")
+                        total_deleted += await redis.delete(*keys)
+                    if cursor == 0:
+                        break
+            logger.info("Deleted %s keys by pattern '%s'", total_deleted,
+                        pattern)
+        except Exception as exc:  # pragma: no cover
+            logger.error("Pattern invalidate error '%s': %s", pattern, exc)
 
-                logger.info(f"Total deleted by {pattern}: {deleted_total}")
-        except Exception as e:
-            logger.error(
-                f"[CACHE INVALIDATE PATTERN ERROR] pattern={pattern}, error={e}")
-
+    # ---------------- user helper ---------------
     @staticmethod
     async def invalidate_user_cache(user_id: int, cache_types: Optional[
         List[str]] = None) -> None:
-        """Инвалидация всего кэша пользователя или конкретных типов"""
-        if cache_types is None:
-            # По умолчанию инвалидируем всё
-            cache_types = ["cart", "favorites", "orders"]
-
-        keys_to_delete = []
-        for cache_type in cache_types:
-            keys_to_delete.append(f"{cache_type}:{user_id}")
-
-        await CacheInvalidator.invalidate(keys_to_delete)
+        cache_types = cache_types or ["cart", "favorites", "orders"]
+        keys = [f"{t}:{user_id}" for t in cache_types]
+        await CacheInvalidator.invalidate(keys)

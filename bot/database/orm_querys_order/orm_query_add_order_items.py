@@ -73,17 +73,17 @@ async def orm_add_order_items(
 
     try:
         await session.execute(insert(OrderItem), insert_data)
-        await session.commit()
+        #await session.commit()
         logger.info(
             f"Успешно добавлено {len(items)} товаров в заказ {order_id}")
         # await CacheInvalidator.invalidate([f"order:{order_id}"])
         return len(items)
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка добавления товаров: {str(e)}")
         raise RuntimeError("Ошибка добавления товаров") from e
     except Exception as e:
-        await session.rollback()
+        #await session.rollback()
         logger.exception("Неожиданная ошибка при добавлении товаров")
         raise RuntimeError("Внутренняя ошибка сервера") from e

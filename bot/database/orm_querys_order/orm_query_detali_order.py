@@ -74,7 +74,7 @@ async def orm_get_user_orders(
         return orders
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка БД при получении заказов: {str(e)}",
                      exc_info=True)
         raise
@@ -83,5 +83,5 @@ async def orm_get_user_orders(
         raise
     except Exception as e:
         logger.exception("Неожиданная ошибка при обработке запроса")
-        await session.rollback()
+        #await session.rollback()
         raise RuntimeError("Ошибка получения заказов") from e

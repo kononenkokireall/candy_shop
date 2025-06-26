@@ -49,7 +49,7 @@ async def orm_delete_order(
         )
 
         if deleted_id:
-            await session.commit()
+            #await session.commit()
             logger.info(f"Заказ {order_id} успешно удален")
             return True
 
@@ -57,7 +57,7 @@ async def orm_delete_order(
         return False
 
     except exc.SQLAlchemyError as e:
-        await session.rollback()
+        #await session.rollback()
         logger.error(f"Ошибка удаления заказа {order_id}: {str(e)}",
                      exc_info=True)
         raise
@@ -65,6 +65,6 @@ async def orm_delete_order(
         logger.warning(f"Некорректные параметры запроса: {str(e)}")
         raise
     except Exception as e:
-        await session.rollback()
+        #await session.rollback()
         logger.exception(f"Неожиданная ошибка при удалении заказа {order_id}")
         raise RuntimeError("Ошибка удаления заказа") from e
